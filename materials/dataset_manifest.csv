@@ -1,0 +1,13 @@
+resource,role_in_project,access_notes
+AOP-Wiki,Qualitative AOP topology and key-event relationships for carcinogenesis pathways,Public web resource; export manually or via documented APIs when available
+EPA AOP-DB,Integrated chemical-pathway-disease AOP data for graph construction,Public EPA resource with downloadable tables when available
+COSMIC Mutational Signatures,Reference SBS/DBS/ID mutational signature profiles,Public reference signatures; check current license and citation requirements
+SigProfilerExtractor,De novo extraction and attribution of mutational signatures from WGS/WES matrices,Open-source Python software
+NCI mSigPortal,Interactive and programmatic mutational signature analysis,Public NCI resource and open-source components
+LINCS L1000 / Connectivity Map,Transcriptomic perturbation signatures for chemical and genetic perturbagens,Public data portals; use metadata to harmonize dose/time/cell type
+EPA ToxCast / CompTox Dashboard,High-throughput assay activity, chemical identifiers, exposure and toxicity metadata,Public EPA resource; use DTXSID/CASRN as keys
+Comparative Toxicogenomics Database,Curated chemical-gene-disease and exposure relationships,Public curated knowledgebase; check download terms
+NCI Genomic Data Commons,Clinical and cancer genomic data for validation of exposure-related signatures,Public and controlled-access tiers; controlled data require dbGaP approval
+TCGA / CPTAC via GDC,Multi-omics tumor data for external validation and transfer learning,Access through GDC and project-specific portals
+GEO / ArrayExpress,Published toxicogenomic experiments and epigenomic datasets,Public repositories; harmonization and batch correction required
+UK Biobank / All of Us / national cohorts,Population-level exposure, genotype, phenotype and cancer-outcome validation,Controlled access; ethics and governance required

@@ -1,0 +1,48 @@
+field_name,field_group,description,unit_or_scale,synthetic_or_real,notes
+sample_id,identifier,Synthetic sample identifier,string,synthetic,No real subject identity.
+chemical_archetype,exposure,Synthetic exposure archetype label,categorical,synthetic,Names are mechanistic motifs rather than real chemicals.
+dose,exposure,Bounded internal exposure intensity sampled from the simulation prior,relative scale,synthetic,Configurable through SimConfig dose parameters.
+coefficient_seed,simulation metadata,Seed used for coefficient-prior sampling; -1 indicates point mode,integer,synthetic,Set by SimConfig coefficient_mode and coefficient_seed.
+kcc1_electrophilic_or_metabolically_activated,KCC,Electrophilic or metabolically activated KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc2_genotoxic,KCC,Genotoxic KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc3_DNA_repair_or_genomic_instability,KCC,DNA repair or genomic-instability KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc4_epigenetic_alteration,KCC,Epigenetic alteration KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc5_oxidative_stress,KCC,Oxidative stress KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc6_chronic_inflammation,KCC,Chronic inflammation KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc7_immunosuppression,KCC,Immunosuppression KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc8_receptor_mediated,KCC,Receptor-mediated KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc9_immortalization,KCC,Immortalization KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+kcc10_proliferation_death_nutrient_supply,KCC,Proliferation death and nutrient-supply KCC coordinate,0 to 1,synthetic,Archetype prior plus noise.
+host_repair_capacity,host,Host DNA repair capacity multiplier,positive relative scale,synthetic,Higher values reduce adduct persistence.
+host_antioxidant_capacity,host,Host antioxidant capacity multiplier,positive relative scale,synthetic,Higher values reduce ROS persistence.
+host_immune_surveillance,host,Host immune surveillance multiplier,positive relative scale,synthetic,Higher values improve immune clearance.
+host_detox_balance,host,Host detoxification and activation balance,positive relative scale,synthetic,Modulates internal dose.
+host_baseline_proliferation,host,Baseline proliferation tendency,real-valued relative scale,synthetic,Input to proliferation state.
+state_final_DNA_adducts,qAOP state,Final simulated DNA adduct burden,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_DNA_adducts,qAOP state,Time-normalized area under DNA adduct trajectory,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_ROS,qAOP state,Final simulated reactive oxygen species state,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_ROS,qAOP state,Time-normalized area under ROS trajectory,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_inflammation,qAOP state,Final simulated inflammation state,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_inflammation,qAOP state,Time-normalized area under inflammation trajectory,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_epigenetic_age,qAOP state,Final simulated epigenetic-age state,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_epigenetic_age,qAOP state,Time-normalized area under epigenetic-age trajectory,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_proliferation,qAOP state,Final simulated proliferation state,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_auc_proliferation,qAOP state,Time-normalized area under proliferation trajectory,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_final_mutation_rate,qAOP state,Final simulated mutation-rate state,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_auc_mutation_rate,qAOP state,Time-normalized area under mutation-rate trajectory,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_final_clone_fraction,qAOP state,Final simulated clone fraction,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_auc_clone_fraction,qAOP state,Time-normalized area under clone-fraction trajectory,0 to 1,synthetic,One of the model-eligible qAOP summaries.
+state_final_driver_count_proxy,qAOP state,Final simulated driver-count proxy,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_driver_count_proxy,qAOP state,Time-normalized area under driver-count proxy trajectory,relative state scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_immune_clearance,qAOP state,Final simulated immune-clearance state,positive relative scale,synthetic,One of the model-eligible qAOP summaries.
+state_auc_immune_clearance,qAOP state,Time-normalized area under immune-clearance trajectory,positive relative scale,synthetic,One of the model-eligible qAOP summaries.
+state_final_latent_risk,endpoint-derived state,Final latent event-risk state,0 to 1,synthetic,Excluded from training features.
+state_auc_latent_risk,endpoint-derived state,Time-normalized area under latent-risk trajectory,0 to 1,synthetic,Excluded from training features.
+tx_*,transcriptomic,Synthetic transcript-module activity,real-valued relative scale,synthetic,Generated from qAOP states and archetype effects.
+epi_*,epigenomic,Synthetic epigenomic module activity,real-valued relative scale,synthetic,Generated from qAOP states and archetype effects.
+sig_activity_*,mutational signature,Synthetic signature activity estimate,nonnegative relative scale,synthetic,Generated from archetype signature profile.
+sig96_*,mutational context,Synthetic 96-channel mutation context count,count,synthetic,Generated from signature profile and mutation burden.
+mut_total_count,mutation burden,Synthetic total mutation count,count,synthetic,Generated from mutation-rate and signature process.
+future_cancer_transition_event,endpoint,Synthetic future transition event label,0 or 1,synthetic,Training target by default.
+future_event_probability,endpoint,Synthetic event probability used to sample the event,0 to 1,synthetic,Excluded from training features.
+high_risk_transition_state,endpoint-derived label,Quantile-derived high-risk latent-state label,0 or 1,synthetic,Excluded from training features.

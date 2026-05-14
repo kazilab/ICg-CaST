@@ -1,0 +1,22 @@
+coefficient,reviewed_by,review_date,decision,dissent_notes
+dynamics.latent_risk.intercept,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.dna_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.ros_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.inflammation_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.proliferation_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.epigenetic_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.driver_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.clone_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.latent_risk.immune_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.mutation_rate.scale,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.dna_adducts.input_kcc1_slope,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.proliferation.dose_kcc8_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.clone_fraction.selection_inflammation,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.inflammation.decay,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+archetypes.pah_tobacco_like.kcc,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+omics.signature_mix.primary_weight_dna_coeff,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.clone_fraction.selection_proliferation,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+susceptibility.immune_surveillance.mean,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.inflammation.ros_coupling,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.inflammation.immune_clearance,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.
+dynamics.dna_adducts.decay,AICG-CaST technical review (expert sign-off pending),2026-05-13,draft_pending_expert_signoff,Domain expert sign-off required before approval.

@@ -1,0 +1,11 @@
+kcc_id,kcc_name,aop_state_variables,example_modalities
+KCC1,electrophilic_or_metabolically_activated,DNA_adducts and bioactivation,chemical structure; adductomics; mutational signatures
+KCC2,genotoxic,DNA_adducts; mutation_rate; driver_acquisition,WGS/WES; micronucleus; comet assay; SBS signatures
+KCC3,alters_DNA_repair_or_genomic_instability,repair_capacity; mutation_rate; chromosomal_instability,transcriptomics; CNV; repair pathway assays
+KCC4,induces_epigenetic_alterations,epigenetic_age; tumor_suppressor_methylation; chromatin_state,DNAm arrays; ATAC-seq; ChIP-seq
+KCC5,induces_oxidative_stress,ROS; oxidative_DNA_damage; mitochondrial_stress,metabolomics; transcriptomics; 8-oxo-dG
+KCC6,induces_chronic_inflammation,inflammation; cytokine_state; tissue_damage,transcriptomics; proteomics; cytokine panels
+KCC7,is_immunosuppressive,immune_surveillance; clone_clearance,immune cell profiling; cytokines; single-cell omics
+KCC8,modulates_receptor_mediated_effects,nuclear_receptor_activation; proliferation,transcriptomics; receptor assays; reporter assays
+KCC9,causes_immortalization,apoptosis_escape; telomere_state; clone_persistence,telomere assays; transcriptomics; proteomics
+KCC10,alters_cell_proliferation_death_or_nutrient_supply,proliferation; angiogenic_or_nutrient_supply; clonal_expansion,cell-cycle transcriptomics; histology; Ki-67

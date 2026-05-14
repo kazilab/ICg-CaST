@@ -1,0 +1,1012 @@
+# ICg-CaST coefficient registry
+# PLAN.md reference: section 25 (Coefficient credibility roadmap), Milestones 8-9.
+#
+# Every numeric coefficient that drives the qAOP dynamics, the latent_risk
+# equation, the chemical archetype tables, and the host susceptibility
+# distributions lives here. Edit this file rather than the source code.
+#
+# Coverage status:
+#   - simulator.py dynamics + susceptibility + cohort sampling : COVERED
+#   - constants.py ARCHETYPE_KCC and ARCHETYPE_SIGNATURE       : COVERED
+#   - omics.py module readout weights                          : COVERED
+#   - signatures.py toy SBS recipe parameters                  : COVERED
+#   - coefficient-card priors for uncertainty sampling          : COVERED
+#
+# Evidence levels:
+#   E1   published quantitative literature value
+#   E2   published qualitative direction or magnitude
+#   E3   AOP-Wiki / AOP-DB / KER weight-of-evidence
+#   E4   expert estimate, plausible biological order of magnitude
+#   E5   no source ("hand-tuned to produce interesting cohorts")
+#
+# Prior distributions:
+#   "auto" lets the loader choose fixed/string, lognormal/signed-lognormal,
+#   logit-normal, or Dirichlet based on value shape and evidence level.
+
+schema_version: "0.2"
+
+defaults:
+  evidence_level: "E5"
+  source: "starter kit (PLAN.md sections 6 and 7)"
+  last_reviewed: "2026-05-13"
+  prior_distribution: "auto"
+  prior_params: {}
+
+cards:
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — DNA adducts                                        #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.dna_adducts.decay
+    default_value: 0.68
+    units: "month^-1"
+    notes: "first-order monthly persistence of the DNA-adduct burden between exposures"
+
+  - name: dynamics.dna_adducts.repair_strength
+    default_value: 0.36
+    units: "dimensionless"
+    notes: "repair-driven removal coefficient on repair_capacity * dna_adducts"
+
+  - name: dynamics.dna_adducts.max
+    default_value: 20.0
+    units: "a.u."
+    notes: "hard ceiling on adduct burden to prevent numerical runaway"
+
+  - name: dynamics.dna_adducts.input_kcc1_intercept
+    default_value: 0.20
+    units: "dimensionless"
+    notes: "baseline KCC1 coupling on adduct input when KCC1 = 0"
+
+  - name: dynamics.dna_adducts.input_kcc1_slope
+    default_value: 1.35
+    units: "dimensionless"
+    notes: "slope of internal-dose -> adduct-input scaling with KCC1 activation"
+
+  - name: dynamics.dna_adducts.input_kcc2_intercept
+    default_value: 0.25
+    units: "dimensionless"
+    notes: "baseline KCC2 coupling on adduct input when KCC2 = 0"
+
+  - name: dynamics.dna_adducts.input_kcc2_slope
+    default_value: 1.10
+    units: "dimensionless"
+    notes: "slope of KCC2 (genotoxicity) contribution to adduct input"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — ROS                                                #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.ros.decay
+    default_value: 0.74
+    units: "month^-1"
+    notes: "monthly persistence of accumulated ROS load"
+
+  - name: dynamics.ros.antioxidant_strength
+    default_value: 0.42
+    units: "dimensionless"
+    notes: "antioxidant-driven ROS clearance coefficient"
+
+  - name: dynamics.ros.max
+    default_value: 20.0
+    units: "a.u."
+    notes: "hard ceiling to prevent runaway"
+
+  - name: dynamics.ros.input_intercept
+    default_value: 0.10
+    units: "dimensionless"
+    notes: "baseline ROS production at zero KCC activation"
+
+  - name: dynamics.ros.input_kcc5_slope
+    default_value: 1.45
+    units: "dimensionless"
+    notes: "ROS production scaling with KCC5 (oxidative-stress activation)"
+
+  - name: dynamics.ros.input_kcc1_slope
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "secondary ROS production through KCC1 (electrophilic activation)"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — cytotoxicity (intermediate sigmoid)                #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.cytotoxicity.intercept
+    default_value: -2.2
+    units: "logit"
+    notes: "baseline cytotoxicity logit at zero DNA-adduct and ROS load"
+
+  - name: dynamics.cytotoxicity.dna_coupling
+    default_value: 0.35
+    units: "logit"
+    notes: "DNA-adduct -> cytotoxicity slope"
+
+  - name: dynamics.cytotoxicity.ros_coupling
+    default_value: 0.25
+    units: "logit"
+    notes: "ROS -> cytotoxicity slope"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — inflammation                                       #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.inflammation.decay
+    default_value: 0.80
+    units: "month^-1"
+    notes: "monthly persistence of accumulated inflammation"
+
+  - name: dynamics.inflammation.ros_coupling
+    default_value: 0.10
+    units: "dimensionless"
+    notes: "ROS -> inflammation slope (per unit ROS)"
+
+  - name: dynamics.inflammation.cytotoxicity_coupling
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "cytotoxicity -> inflammation slope"
+
+  - name: dynamics.inflammation.dose_kcc6_coupling
+    default_value: 0.95
+    units: "dimensionless"
+    notes: "internal_dose * KCC6 (chronic inflammation key characteristic) coupling"
+
+  - name: dynamics.inflammation.immune_clearance
+    default_value: 0.24
+    units: "month^-1"
+    notes: "immune-driven resolution of inflammation"
+
+  - name: dynamics.inflammation.max
+    default_value: 20.0
+    units: "a.u."
+    notes: "hard ceiling to prevent runaway"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — epigenetic age                                     #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.epigenetic_age.background_rate
+    default_value: 0.011
+    units: "a.u. / month"
+    notes: "background epigenetic-age accrual independent of exposure"
+
+  - name: dynamics.epigenetic_age.dose_kcc4_coupling
+    default_value: 0.055
+    units: "dimensionless"
+    notes: "internal_dose * KCC4 (epigenetic alteration) coupling"
+
+  - name: dynamics.epigenetic_age.dose_kcc5_coupling
+    default_value: 0.018
+    units: "dimensionless"
+    notes: "internal_dose * KCC5 (oxidative stress) coupling"
+
+  - name: dynamics.epigenetic_age.dose_kcc6_coupling
+    default_value: 0.018
+    units: "dimensionless"
+    notes: "internal_dose * KCC6 (chronic inflammation) coupling"
+
+  - name: dynamics.epigenetic_age.ros_coupling
+    default_value: 0.003
+    units: "1/(unit ROS)"
+    notes: "ROS -> epigenetic-age accrual"
+
+  - name: dynamics.epigenetic_age.max
+    default_value: 50.0
+    units: "a.u."
+    notes: "hard ceiling to prevent runaway"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — proliferation (sigmoid)                            #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.proliferation.intercept
+    default_value: -2.1
+    units: "logit"
+    notes: "baseline proliferation logit"
+
+  - name: dynamics.proliferation.inflammation_coupling
+    default_value: 0.27
+    units: "logit"
+    notes: "inflammation -> proliferation slope"
+
+  - name: dynamics.proliferation.cytotoxicity_coupling
+    default_value: 0.20
+    units: "logit"
+    notes: "cytotoxicity -> proliferation slope (compensatory)"
+
+  - name: dynamics.proliferation.dose_kcc8_coupling
+    default_value: 1.15
+    units: "logit"
+    notes: "internal_dose * KCC8 (receptor-mediated) coupling"
+
+  - name: dynamics.proliferation.kcc10_coupling
+    default_value: 0.90
+    units: "logit"
+    notes: "KCC10 (proliferation / death / nutrient supply) slope"
+
+  - name: dynamics.proliferation.epigenetic_coupling
+    default_value: 0.16
+    units: "logit"
+    notes: "epigenetic_age -> proliferation slope"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — mutation rate                                      #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.mutation_rate.scale
+    default_value: 0.0012
+    units: "mutations per Mb per division (synthetic scale)"
+    evidence_level: "E4"
+    notes: "rough order-of-magnitude for somatic mutation per division before amplification"
+
+  - name: dynamics.mutation_rate.dna_kcc2_coupling
+    default_value: 4.8
+    units: "dimensionless"
+    notes: "DNA-adduct * KCC2 (genotoxicity) amplifier on mutation rate"
+
+  - name: dynamics.mutation_rate.ros_coupling
+    default_value: 1.2
+    units: "dimensionless"
+    notes: "ROS amplifier on mutation rate"
+
+  - name: dynamics.mutation_rate.repair_deficit_coupling
+    default_value: 2.0
+    units: "dimensionless"
+    notes: "(1 - repair_capacity) amplifier on mutation rate"
+
+  - name: dynamics.mutation_rate.proliferation_coupling
+    default_value: 0.9
+    units: "dimensionless"
+    notes: "proliferation amplifier on mutation rate"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — driver count proxy                                 #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.driver_count.intercept
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "baseline driver-acquisition rate at zero proliferation"
+
+  - name: dynamics.driver_count.proliferation_coupling
+    default_value: 2.0
+    units: "dimensionless"
+    notes: "proliferation amplifier on driver acquisition"
+
+  - name: dynamics.driver_count.kcc9_coupling
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "KCC9 (immortalization) amplifier on driver acquisition"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — clone fraction                                     #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.clone_fraction.init_scale
+    default_value: 1.0e-5
+    units: "fraction"
+    notes: "median initial clone fraction (before lognormal noise)"
+
+  - name: dynamics.clone_fraction.init_lognormal_sigma
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "lognormal sigma for the initial clone-fraction draw"
+
+  - name: dynamics.clone_fraction.min
+    default_value: 1.0e-8
+    units: "fraction"
+    notes: "numerical floor"
+
+  - name: dynamics.clone_fraction.max
+    default_value: 0.99
+    units: "fraction"
+    notes: "numerical ceiling"
+
+  - name: dynamics.clone_fraction.selection_intercept
+    default_value: -0.020
+    units: "month^-1"
+    notes: "baseline negative selection on micro-clones"
+
+  - name: dynamics.clone_fraction.selection_proliferation
+    default_value: 0.30
+    units: "dimensionless"
+    notes: "proliferation -> clonal selection coefficient"
+
+  - name: dynamics.clone_fraction.selection_inflammation
+    default_value: 0.070
+    units: "dimensionless"
+    notes: "inflammation -> clonal selection coefficient"
+
+  - name: dynamics.clone_fraction.selection_epigenetic
+    default_value: 0.045
+    units: "dimensionless"
+    notes: "epigenetic_age -> clonal selection coefficient"
+
+  - name: dynamics.clone_fraction.selection_kcc9
+    default_value: 0.18
+    units: "dimensionless"
+    notes: "KCC9 (immortalization) -> clonal selection coefficient"
+
+  - name: dynamics.clone_fraction.selection_immune
+    default_value: 0.22
+    units: "dimensionless"
+    notes: "immune clearance -> clonal *de*selection coefficient (subtracts)"
+
+  - name: dynamics.clone_fraction.selection_drivers
+    default_value: 0.09
+    units: "dimensionless"
+    notes: "driver_count_proxy -> clonal selection coefficient"
+
+  - name: dynamics.clone_fraction.selection_noise_sigma
+    default_value: 0.005
+    units: "dimensionless"
+    notes: "monthly Gaussian noise on selection coefficient"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — repair-capacity transform                          #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.repair.kcc3_inhibition
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "KCC3 (DNA repair / genomic instability) inhibition of repair capacity"
+
+  - name: dynamics.repair.min
+    default_value: 0.15
+    units: "dimensionless"
+    notes: "lower clip on effective repair capacity"
+
+  - name: dynamics.repair.max
+    default_value: 1.2
+    units: "dimensionless"
+    notes: "upper clip on effective repair capacity"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — immune transform                                   #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.immune.kcc7_inhibition
+    default_value: 0.45
+    units: "dimensionless"
+    notes: "KCC7 (immunosuppression) inhibition of immune surveillance"
+
+  - name: dynamics.immune.min
+    default_value: 0.05
+    units: "dimensionless"
+    notes: "lower clip on effective immune clearance"
+
+  - name: dynamics.immune.max
+    default_value: 1.2
+    units: "dimensionless"
+    notes: "upper clip on effective immune clearance"
+
+  # ------------------------------------------------------------------ #
+  # qAOP dynamics — dose modulation (per-month)                        #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.dose.cyclical_baseline
+    default_value: 0.85
+    units: "dimensionless"
+    notes: "baseline (mean) of the seasonal-cycle dose multiplier"
+
+  - name: dynamics.dose.cyclical_amplitude
+    default_value: 0.15
+    units: "dimensionless"
+    notes: "amplitude of the seasonal-cycle dose multiplier"
+
+  - name: dynamics.dose.cyclical_period_months
+    default_value: 12.0
+    units: "months"
+    notes: "period of the cyclical multiplier (annual)"
+
+  - name: dynamics.dose.pulse_lognormal_mean
+    default_value: -0.02
+    units: "log-units"
+    notes: "median of per-month dose pulse multiplier (log-units)"
+
+  - name: dynamics.dose.pulse_lognormal_sigma
+    default_value: 0.15
+    units: "log-units"
+    notes: "spread of per-month dose pulse multiplier"
+
+  # ------------------------------------------------------------------ #
+  # latent_risk equation (the reference oracle, see Milestone 11)      #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.latent_risk.intercept
+    default_value: -7.5
+    units: "logit"
+    notes: "baseline latent_risk logit at zero qAOP state activation"
+
+  - name: dynamics.latent_risk.dna_coupling
+    default_value: 1.20
+    units: "logit / unit log1p(DNA_adducts)"
+    notes: "DNA_adducts -> risk slope (log-scaled)"
+
+  - name: dynamics.latent_risk.ros_coupling
+    default_value: 0.70
+    units: "logit / unit log1p(ROS)"
+    notes: "ROS -> risk slope (log-scaled)"
+
+  - name: dynamics.latent_risk.inflammation_coupling
+    default_value: 0.95
+    units: "logit / unit log1p(inflammation)"
+    notes: "inflammation -> risk slope (log-scaled)"
+
+  - name: dynamics.latent_risk.proliferation_coupling
+    default_value: 1.50
+    units: "logit"
+    notes: "proliferation -> risk slope (linear)"
+
+  - name: dynamics.latent_risk.epigenetic_coupling
+    default_value: 0.85
+    units: "logit / unit log1p(epigenetic_age)"
+    notes: "epigenetic_age -> risk slope (log-scaled)"
+
+  - name: dynamics.latent_risk.driver_coupling
+    default_value: 1.80
+    units: "logit / unit log1p(driver_count_proxy)"
+    notes: "driver count -> risk slope (log-scaled)"
+
+  - name: dynamics.latent_risk.clone_coupling
+    default_value: 4.50
+    units: "logit / unit clone_fraction"
+    notes: "clone fraction -> risk slope (linear)"
+
+  - name: dynamics.latent_risk.immune_coupling
+    default_value: 0.90
+    units: "logit / unit immune_clearance"
+    notes: "immune clearance -> risk slope (linear, *subtracts*)"
+
+  # ------------------------------------------------------------------ #
+  # Host susceptibility distributions                                  #
+  # ------------------------------------------------------------------ #
+
+  - name: susceptibility.repair_capacity.mean
+    default_value: 0.82
+    units: "dimensionless"
+    notes: "population mean of host repair capacity prior to KCC modulation"
+
+  - name: susceptibility.repair_capacity.sd
+    default_value: 0.18
+    units: "dimensionless"
+
+  - name: susceptibility.repair_capacity.min
+    default_value: 0.35
+    units: "dimensionless"
+
+  - name: susceptibility.repair_capacity.max
+    default_value: 1.25
+    units: "dimensionless"
+
+  - name: susceptibility.antioxidant_capacity.mean
+    default_value: 0.85
+    units: "dimensionless"
+
+  - name: susceptibility.antioxidant_capacity.sd
+    default_value: 0.17
+    units: "dimensionless"
+
+  - name: susceptibility.antioxidant_capacity.min
+    default_value: 0.35
+    units: "dimensionless"
+
+  - name: susceptibility.antioxidant_capacity.max
+    default_value: 1.25
+    units: "dimensionless"
+
+  - name: susceptibility.immune_surveillance.mean
+    default_value: 0.82
+    units: "dimensionless"
+
+  - name: susceptibility.immune_surveillance.sd
+    default_value: 0.20
+    units: "dimensionless"
+
+  - name: susceptibility.immune_surveillance.min
+    default_value: 0.25
+    units: "dimensionless"
+
+  - name: susceptibility.immune_surveillance.max
+    default_value: 1.30
+    units: "dimensionless"
+
+  - name: susceptibility.detox_balance.lognormal_mean
+    default_value: 0.0
+    units: "log-units"
+    notes: "median host detox balance (log-units)"
+
+  - name: susceptibility.detox_balance.lognormal_sigma
+    default_value: 0.20
+    units: "log-units"
+
+  - name: susceptibility.detox_balance.min
+    default_value: 0.55
+    units: "dimensionless"
+
+  - name: susceptibility.detox_balance.max
+    default_value: 1.65
+    units: "dimensionless"
+
+  - name: susceptibility.baseline_proliferation.mean
+    default_value: 0.0
+    units: "dimensionless"
+
+  - name: susceptibility.baseline_proliferation.sd
+    default_value: 0.55
+    units: "dimensionless"
+
+  - name: susceptibility.baseline_proliferation.min
+    default_value: -1.2
+    units: "dimensionless"
+
+  - name: susceptibility.baseline_proliferation.max
+    default_value: 1.2
+    units: "dimensionless"
+
+  # ------------------------------------------------------------------ #
+  # Cohort-level coefficients                                          #
+  # ------------------------------------------------------------------ #
+
+  - name: cohort.high_risk_quantile
+    default_value: 0.72
+    units: "fraction"
+    notes: "quantile of state_final_latent_risk used to flag high_risk_transition_state"
+
+  # ------------------------------------------------------------------ #
+  # Chemical archetypes (ARCHETYPE_KCC + ARCHETYPE_SIGNATURE)          #
+  # 10-element vectors aligned with KCC_NAMES order in constants.py    #
+  # ------------------------------------------------------------------ #
+
+  - name: archetypes.inert_control.kcc
+    default_value: [0.02, 0.02, 0.02, 0.02, 0.03, 0.02, 0.02, 0.02, 0.01, 0.02]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "background reference; should produce the lowest mean risk"
+
+  - name: archetypes.inert_control.signature
+    default_value: "aging"
+    notes: "expected mutational signature for the inert control archetype"
+
+  - name: archetypes.pah_tobacco_like.kcc
+    default_value: [0.92, 0.90, 0.40, 0.20, 0.55, 0.35, 0.10, 0.25, 0.10, 0.55]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "PAH/tobacco-smoke-like mechanism vector (electrophilic + genotoxic dominant)"
+
+  - name: archetypes.pah_tobacco_like.signature
+    default_value: "SBS4_like"
+    notes: "synthetic approximation of COSMIC SBS4"
+
+  - name: archetypes.aflatoxin_like.kcc
+    default_value: [0.95, 0.92, 0.55, 0.20, 0.35, 0.20, 0.08, 0.10, 0.08, 0.40]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "aflatoxin-like mechanism vector (strong genotoxic, hepatic context)"
+
+  - name: archetypes.aflatoxin_like.signature
+    default_value: "SBS24_like"
+    notes: "synthetic approximation of COSMIC SBS24"
+
+  - name: archetypes.aristolochic_like.kcc
+    default_value: [0.85, 0.90, 0.45, 0.15, 0.25, 0.15, 0.08, 0.08, 0.08, 0.35]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "aristolochic-acid-like mechanism vector"
+
+  - name: archetypes.aristolochic_like.signature
+    default_value: "SBS22_like"
+    notes: "synthetic approximation of COSMIC SBS22"
+
+  - name: archetypes.cyp2e1_ros_like.kcc
+    default_value: [0.25, 0.12, 0.25, 0.20, 0.88, 0.75, 0.15, 0.20, 0.12, 0.70]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "CYP2E1-driven ROS-dominant mechanism vector"
+
+  - name: archetypes.cyp2e1_ros_like.signature
+    default_value: "oxidative_like"
+
+  - name: archetypes.metal_epigenetic_like.kcc
+    default_value: [0.20, 0.22, 0.65, 0.85, 0.70, 0.60, 0.25, 0.18, 0.20, 0.45]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "metal-driven epigenetic-modifying mechanism vector"
+
+  - name: archetypes.metal_epigenetic_like.signature
+    default_value: "oxidative_like"
+
+  - name: archetypes.endocrine_receptor_like.kcc
+    default_value: [0.08, 0.05, 0.15, 0.55, 0.20, 0.30, 0.10, 0.92, 0.20, 0.82]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "receptor-mediated endocrine mechanism vector (low genotoxicity, high proliferative)"
+
+  - name: archetypes.endocrine_receptor_like.signature
+    default_value: "aging"
+    notes: "no characteristic SBS signature; baseline aging dominates"
+
+  - name: archetypes.immune_suppression_like.kcc
+    default_value: [0.05, 0.08, 0.15, 0.30, 0.25, 0.65, 0.90, 0.20, 0.55, 0.35]
+    units: "10-vector of KCC activations in [0, 1]"
+    evidence_level: "E4"
+    notes: "immunosuppression-dominant mechanism vector"
+
+  - name: archetypes.immune_suppression_like.signature
+    default_value: "aging"
+    notes: "no characteristic SBS signature; baseline aging dominates"
+
+  # Per-archetype sampling prior used by simulate_cohort.
+  - name: archetypes.sample_prior
+    default_value: [0.14, 0.14, 0.12, 0.10, 0.14, 0.14, 0.12, 0.10]
+    units: "8-vector of categorical probabilities, in ARCHETYPE_KCC iteration order"
+    notes: "categorical prior for sampling archetypes; normalised at use site"
+
+  - name: archetypes.kcc_noise_sigma
+    default_value: 0.05
+    units: "dimensionless"
+    notes: "Gaussian noise added to each archetype KCC component per subject"
+
+  # ================================================================== #
+  # Transcriptomic module readouts (omics.py)                          #
+  # ------------------------------------------------------------------ #
+  # Each module is a linear combination of qAOP state AUCs + KCC vector#
+  # + host susceptibility components, with Gaussian noise applied at   #
+  # the end. Coefficient names follow the pattern                      #
+  #   omics.transcript.<module>.<input>_coeff                          #
+  # where <input> is one of:                                           #
+  #   dna, ros, inflammation, epi_age, proliferation, clone, drivers   #
+  #   kcc1 .. kcc10                                                    #
+  #   susceptibility_repair, susceptibility_immune                     #
+  # ------------------------------------------------------------------ #
+
+  # DNA_adduct_response
+  - name: omics.transcript.DNA_adduct_response.dna_coeff
+    default_value: 0.8
+    units: "dimensionless"
+  - name: omics.transcript.DNA_adduct_response.kcc1_coeff
+    default_value: 1.2
+    units: "dimensionless"
+  - name: omics.transcript.DNA_adduct_response.kcc2_coeff
+    default_value: 1.0
+    units: "dimensionless"
+
+  # p53_checkpoint
+  - name: omics.transcript.p53_checkpoint.dna_coeff
+    default_value: 0.6
+  - name: omics.transcript.p53_checkpoint.ros_coeff
+    default_value: 0.7
+  - name: omics.transcript.p53_checkpoint.kcc2_coeff
+    default_value: 0.8
+
+  # base_excision_repair
+  - name: omics.transcript.base_excision_repair.ros_coeff
+    default_value: 0.6
+  - name: omics.transcript.base_excision_repair.kcc3_coeff
+    default_value: -0.8
+    notes: "KCC3 (DNA repair / genomic instability) suppresses BER expression"
+  - name: omics.transcript.base_excision_repair.susceptibility_repair_coeff
+    default_value: 0.3
+
+  # nucleotide_excision_repair
+  - name: omics.transcript.nucleotide_excision_repair.dna_coeff
+    default_value: 0.7
+  - name: omics.transcript.nucleotide_excision_repair.kcc3_coeff
+    default_value: -0.7
+    notes: "KCC3 suppresses NER expression"
+  - name: omics.transcript.nucleotide_excision_repair.susceptibility_repair_coeff
+    default_value: 0.2
+
+  # xenobiotic_metabolism_CYP
+  - name: omics.transcript.xenobiotic_metabolism_CYP.kcc1_coeff
+    default_value: 1.3
+  - name: omics.transcript.xenobiotic_metabolism_CYP.kcc8_coeff
+    default_value: 0.8
+  - name: omics.transcript.xenobiotic_metabolism_CYP.dna_coeff
+    default_value: 0.5
+
+  # oxidative_stress_response
+  - name: omics.transcript.oxidative_stress_response.ros_coeff
+    default_value: 1.1
+  - name: omics.transcript.oxidative_stress_response.kcc5_coeff
+    default_value: 1.0
+
+  # mitochondrial_dysfunction
+  - name: omics.transcript.mitochondrial_dysfunction.ros_coeff
+    default_value: 0.9
+  - name: omics.transcript.mitochondrial_dysfunction.inflammation_coeff
+    default_value: 0.4
+
+  # inflammatory_cytokines
+  - name: omics.transcript.inflammatory_cytokines.inflammation_coeff
+    default_value: 1.2
+  - name: omics.transcript.inflammatory_cytokines.kcc6_coeff
+    default_value: 0.8
+
+  # NFkB_activation
+  - name: omics.transcript.NFkB_activation.inflammation_coeff
+    default_value: 0.9
+  - name: omics.transcript.NFkB_activation.ros_coeff
+    default_value: 0.5
+  - name: omics.transcript.NFkB_activation.kcc6_coeff
+    default_value: 0.6
+
+  # cell_cycle_E2F
+  - name: omics.transcript.cell_cycle_E2F.proliferation_coeff
+    default_value: 1.8
+  - name: omics.transcript.cell_cycle_E2F.kcc10_coeff
+    default_value: 0.7
+  - name: omics.transcript.cell_cycle_E2F.clone_coeff
+    default_value: 0.2
+
+  # replicative_DNA_synthesis
+  - name: omics.transcript.replicative_DNA_synthesis.proliferation_coeff
+    default_value: 1.5
+  - name: omics.transcript.replicative_DNA_synthesis.kcc8_coeff
+    default_value: 0.5
+  - name: omics.transcript.replicative_DNA_synthesis.kcc10_coeff
+    default_value: 0.7
+
+  # apoptosis_escape
+  - name: omics.transcript.apoptosis_escape.kcc9_coeff
+    default_value: 0.7
+  - name: omics.transcript.apoptosis_escape.clone_coeff
+    default_value: 0.8
+  - name: omics.transcript.apoptosis_escape.inflammation_coeff
+    default_value: 0.3
+
+  # ECM_fibrosis
+  - name: omics.transcript.ECM_fibrosis.inflammation_coeff
+    default_value: 0.9
+  - name: omics.transcript.ECM_fibrosis.epi_age_coeff
+    default_value: 0.8
+  - name: omics.transcript.ECM_fibrosis.kcc4_coeff
+    default_value: 0.4
+
+  # angiogenesis_nutrient_supply
+  - name: omics.transcript.angiogenesis_nutrient_supply.proliferation_coeff
+    default_value: 0.6
+  - name: omics.transcript.angiogenesis_nutrient_supply.inflammation_coeff
+    default_value: 0.7
+  - name: omics.transcript.angiogenesis_nutrient_supply.kcc10_coeff
+    default_value: 0.5
+
+  # immune_evasion
+  - name: omics.transcript.immune_evasion.kcc7_coeff
+    default_value: 0.9
+  - name: omics.transcript.immune_evasion.clone_coeff
+    default_value: 0.7
+  - name: omics.transcript.immune_evasion.susceptibility_immune_coeff
+    default_value: -0.5
+    notes: "host immune surveillance subtracts from observed immune-evasion signal"
+
+  # nuclear_receptor_program
+  - name: omics.transcript.nuclear_receptor_program.kcc8_coeff
+    default_value: 1.6
+  - name: omics.transcript.nuclear_receptor_program.proliferation_coeff
+    default_value: 0.5
+
+  # stemness_PRC2
+  - name: omics.transcript.stemness_PRC2.epi_age_coeff
+    default_value: 0.9
+  - name: omics.transcript.stemness_PRC2.kcc4_coeff
+    default_value: 0.6
+  - name: omics.transcript.stemness_PRC2.drivers_coeff
+    default_value: 0.3
+
+  # senescence_SASP
+  - name: omics.transcript.senescence_SASP.ros_coeff
+    default_value: 0.4
+  - name: omics.transcript.senescence_SASP.inflammation_coeff
+    default_value: 0.9
+  - name: omics.transcript.senescence_SASP.epi_age_coeff
+    default_value: 0.4
+
+  # Transcriptomic measurement noise.
+  - name: omics.transcript.noise_sigma
+    default_value: 0.25
+    units: "module units"
+    notes: "Gaussian additive noise applied to each transcript module value"
+
+  # ================================================================== #
+  # Epigenomic module readouts (omics.py)                              #
+  # ------------------------------------------------------------------ #
+  # PRC2_mitotic_clock is reformulated as a linear combination of      #
+  # epi_age, (epi_age * proliferation), and drivers so every epi card  #
+  # is one linear coefficient.                                         #
+  # ------------------------------------------------------------------ #
+
+  # epigenetic_age_acceleration
+  - name: omics.epi.epigenetic_age_acceleration.epi_age_coeff
+    default_value: 1.0
+    notes: "previously implicit (1.0) coefficient on epi_age"
+  - name: omics.epi.epigenetic_age_acceleration.kcc4_coeff
+    default_value: 0.5
+  - name: omics.epi.epigenetic_age_acceleration.ros_coeff
+    default_value: 0.2
+
+  # PRC2_mitotic_clock = epi_age * (a + b * proliferation) + c * drivers
+  - name: omics.epi.PRC2_mitotic_clock.epi_age_coeff
+    default_value: 0.75
+    notes: "constant a; the (1 - proliferation) part of the epi_age multiplier"
+  - name: omics.epi.PRC2_mitotic_clock.epi_age_times_proliferation_coeff
+    default_value: 0.8
+    notes: "coefficient on epi_age * proliferation interaction"
+  - name: omics.epi.PRC2_mitotic_clock.drivers_coeff
+    default_value: 0.3
+
+  # global_hypomethylation
+  - name: omics.epi.global_hypomethylation.epi_age_coeff
+    default_value: 0.5
+  - name: omics.epi.global_hypomethylation.kcc4_coeff
+    default_value: 0.7
+  - name: omics.epi.global_hypomethylation.ros_coeff
+    default_value: 0.25
+
+  # tumor_suppressor_hypermethylation
+  - name: omics.epi.tumor_suppressor_hypermethylation.epi_age_coeff
+    default_value: 0.6
+  - name: omics.epi.tumor_suppressor_hypermethylation.kcc4_coeff
+    default_value: 0.6
+  - name: omics.epi.tumor_suppressor_hypermethylation.clone_coeff
+    default_value: 0.35
+
+  # enhancer_reprogramming
+  - name: omics.epi.enhancer_reprogramming.kcc4_coeff
+    default_value: 0.6
+  - name: omics.epi.enhancer_reprogramming.kcc8_coeff
+    default_value: 0.4
+  - name: omics.epi.enhancer_reprogramming.inflammation_coeff
+    default_value: 0.25
+
+  # histone_activation_loss
+  - name: omics.epi.histone_activation_loss.kcc4_coeff
+    default_value: 0.8
+  - name: omics.epi.histone_activation_loss.epi_age_coeff
+    default_value: 0.4
+
+  # histone_repression_gain
+  - name: omics.epi.histone_repression_gain.kcc4_coeff
+    default_value: 0.9
+  - name: omics.epi.histone_repression_gain.epi_age_coeff
+    default_value: 0.3
+  - name: omics.epi.histone_repression_gain.drivers_coeff
+    default_value: 0.25
+
+  # chromatin_accessibility_shift
+  - name: omics.epi.chromatin_accessibility_shift.kcc4_coeff
+    default_value: 0.4
+  - name: omics.epi.chromatin_accessibility_shift.ros_coeff
+    default_value: 0.3
+  - name: omics.epi.chromatin_accessibility_shift.kcc8_coeff
+    default_value: 0.3
+
+  # Epigenomic measurement noise.
+  - name: omics.epi.noise_sigma
+    default_value: 0.18
+    units: "module units"
+    notes: "Gaussian additive noise applied to each epi module value"
+
+  # ================================================================== #
+  # Mutational-signature mixing + total-mutation count                 #
+  # ------------------------------------------------------------------ #
+
+  - name: omics.signature_mix.aging_base_weight
+    default_value: 0.45
+    units: "weight"
+    notes: "weight on the 'aging' baseline signature before primary-signature blending"
+
+  - name: omics.signature_mix.primary_weight_intercept
+    default_value: 0.1
+    units: "weight"
+  - name: omics.signature_mix.primary_weight_kcc2_coeff
+    default_value: 0.40
+    units: "weight"
+  - name: omics.signature_mix.primary_weight_dna_coeff
+    default_value: 0.12
+    units: "weight"
+  - name: omics.signature_mix.primary_weight_ros_coeff
+    default_value: 0.06
+    units: "weight"
+  - name: omics.signature_mix.primary_weight_min
+    default_value: 0.05
+    units: "weight"
+  - name: omics.signature_mix.primary_weight_max
+    default_value: 0.85
+    units: "weight"
+
+  - name: omics.signature_mix.oxidative_kcc5_threshold
+    default_value: 0.5
+    units: "KCC5 activation"
+    notes: "subjects with KCC5 (oxidative stress) above this get an oxidative_like blend"
+  - name: omics.signature_mix.oxidative_base_weight
+    default_value: 0.80
+    units: "weight"
+    notes: "weight on the prior mix when the oxidative blend triggers"
+  - name: omics.signature_mix.oxidative_blend_weight
+    default_value: 0.20
+    units: "weight"
+
+  - name: omics.mut_total.intercept
+    default_value: 80.0
+    units: "mutation count"
+    notes: "baseline expected mutation count per subject (Poisson lambda intercept)"
+  - name: omics.mut_total.mutation_rate_coeff
+    default_value: 350.0
+    units: "mutation count per unit AUC"
+  - name: omics.mut_total.drivers_coeff
+    default_value: 40.0
+    units: "mutation count per unit drivers"
+  - name: omics.mut_total.dna_coeff
+    default_value: 35.0
+    units: "mutation count per unit DNA-adduct AUC"
+  - name: omics.mut_total.ros_coeff
+    default_value: 15.0
+    units: "mutation count per unit ROS AUC"
+  - name: omics.mut_total.min_count
+    default_value: 10
+    units: "mutation count"
+    notes: "lower clip on the Poisson draw"
+
+  # ================================================================== #
+  # Mutational-signature recipe (signatures.py)                        #
+  # ------------------------------------------------------------------ #
+
+  - name: signatures.background.seed
+    default_value: 123
+    units: "RNG seed"
+    notes: "seed for the gamma background drawn once at module import"
+  - name: signatures.background.gamma_shape
+    default_value: 1.0
+    units: "gamma shape"
+  - name: signatures.background.gamma_scale
+    default_value: 0.2
+    units: "gamma scale"
+  - name: signatures.background.min_clip
+    default_value: 1.0e-9
+    units: "weight"
+    notes: "lower clip on signature weights before per-column normalisation"
+
+  - name: signatures.aging.C_to_T_boost
+    default_value: 1.0
+    units: "weight"
+    notes: "boost on every C>T trinucleotide context"
+  - name: signatures.aging.CpG_boost
+    default_value: 2.0
+    units: "weight"
+    notes: "extra boost on C>T at CpG sites (any A/C/G/T 5' base, G 3' base)"
+
+  - name: signatures.SBS4_like.C_to_A_boost
+    default_value: 2.8
+    units: "weight"
+    notes: "boost on every C>A context (PAH-like fingerprint)"
+  - name: signatures.SBS4_like.AT_ending_extra_boost
+    default_value: 0.8
+    units: "weight"
+    notes: "extra boost on C>A contexts ending in A or T"
+
+  - name: signatures.SBS24_like.C_to_A_boost
+    default_value: 1.4
+    units: "weight"
+    notes: "moderate C>A boost; aflatoxin-like"
+  - name: signatures.SBS24_like.context_pattern_boost
+    default_value: 3.0
+    units: "weight"
+    notes: "extra boost on C>A contexts with G/T 5' base and G/C 3' base"
+
+  - name: signatures.SBS22_like.T_to_A_boost
+    default_value: 3.2
+    units: "weight"
+    notes: "boost on every T>A context (aristolochic-acid-like fingerprint)"
+  - name: signatures.SBS22_like.CT_leading_extra_boost
+    default_value: 1.0
+    units: "weight"
+    notes: "extra boost on T>A contexts with C or T 5' base"
+
+  - name: signatures.oxidative_like.C_to_AorG_boost
+    default_value: 1.5
+    units: "weight"
+    notes: "boost on C>A and C>G contexts (ROS-driven fingerprint)"
+  - name: signatures.oxidative_like.T_to_G_boost
+    default_value: 0.6
+    units: "weight"
+    notes: "secondary boost on T>G contexts"

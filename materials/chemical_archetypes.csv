@@ -1,0 +1,9 @@
+archetype,mechanistic_interpretation,dominant_kccs,expected_signature,dominant_aop
+inert_control,low perturbation reference,none,aging/background,homeostasis
+pah_tobacco_like,bulky DNA adduct genotoxicant,KCC1;KCC2;KCC5;KCC10,SBS4-like,AOP46 genotoxic HCC/lung-like path
+aflatoxin_like,hepatic metabolic activation to DNA adducts,KCC1;KCC2;KCC3,SBS24-like,AOP46 aflatoxin-like path
+aristolochic_like,persistent adenine adduct genotoxicant,KCC1;KCC2,SBS22-like,genotoxic kidney/liver-like path
+cyp2e1_ros_like,non-genotoxic oxidative liver injury,KCC5;KCC6;KCC10,weak or none,AOP220-like oxidative path
+metal_epigenetic_like,epigenetic and oxidative metal exposure,KCC3;KCC4;KCC5;KCC6,weak or none,epigenetic instability path
+endocrine_receptor_like,receptor-mediated proliferative pressure,KCC4;KCC8;KCC10,weak or none,receptor/proliferation path
+immune_suppression_like,loss of clone surveillance,KCC6;KCC7;KCC9,weak or none,immune escape path
