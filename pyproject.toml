@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "icg-cast"
-dynamic = ["version", "description"]
+description = "Causal-state simulation and mechanism-bottleneck benchmarking for integrated carcinogenomics."
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -53,11 +54,10 @@ icg-cast = "icg_cast.cli:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-# Version and one-line description are sourced from the single branding
-# module so a rebrand only requires editing src/icg_cast/_branding.py.
+# Version is sourced from the single branding module so release updates only
+# need to edit src/icg_cast/_branding.py.
 [tool.setuptools.dynamic]
 version = {attr = "icg_cast._branding.VERSION"}
-description = {attr = "icg_cast._branding.PROJECT_TAGLINE"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
