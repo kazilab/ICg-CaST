@@ -11,7 +11,7 @@
 <!-- PyPI version badge -->
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub](https://img.shields.io/badge/ICg-CaST?logo=https%3A%2F%2Fgithub.com%2Fkazilab%2FICg-CaST&logoColor=rgb)](https://github.com/kazilab/ICg-CaST)
+[![GitHub](https://img.shields.io/badge/ICg--CaST-181717?logo=github&logoColor=white)](https://github.com/kazilab/ICg-CaST)
 [![@KaziLab.se](https://img.shields.io/website?url=https://www.kazilab.se/)](https://www.kazilab.se/)
 <!-- PyPI version badge -->
 
