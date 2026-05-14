@@ -42,7 +42,7 @@ templates_path = ["_templates"]
 html_theme = "sphinx_rtd_theme"
 html_title = f"{PROJECT_NAME} documentation"
 html_short_title = PROJECT_NAME
-html_static_path = ["_static"]
+html_static_path = ["_static"] if (Path(__file__).parent / "_static").exists() else []
 
 myst_enable_extensions = [
     "colon_fence",
