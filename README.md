@@ -1,6 +1,19 @@
 # ICg-CaST
-
+<!-- PyPI version badge -->
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://icg-cast.streamlit.app)
 [![Documentation Status](https://readthedocs.org/projects/icg-cast/badge/?version=latest)](https://icg-cast.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://img.shields.io/pypi/v/icg-cast.svg)](https://pypi.org/project/icg-cast/)
+[![Documentation Status](https://readthedocs.org/projects/icg-cast/badge/?version=latest)](https://icg-cast.readthedocs.io/en/latest/?badge=latest)
+
+<!-- 
+[![bioRxiv](https://img.shields.io/badge/bioRxiv-10.64898%2F2026.03.22.713456-b31b1b.svg)](https://doi.org/10.64898/2026.03.22.713456)
+-->
+<!-- PyPI version badge -->
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-kazilab%2FICg-CaST-181717?logo=github&logoColor=white)](https://github.com/kazilab/ICg-CaST)
+[![@KaziLab.se](https://img.shields.io/website?url=https://www.kazilab.se/)](https://www.kazilab.se/)
+<!-- PyPI version badge -->
 
 **ICg-CaST** is a research package for synthetic integrated carcinogenomics experiments:
 causal-state simulation, mechanism-bottleneck models, and ICg-Bench benchmark
