@@ -1,0 +1,3 @@
+# Streamlit/browser-app dependencies.
+# This installs ICg-CaST plus the optional Streamlit app extra from pyproject.toml.
+-e .[app]

@@ -10,6 +10,13 @@ training and evaluation, ICg-Bench experiments, and output inspection.
 python -m pip install -e ".[app]"
 ```
 
+For Streamlit Community Cloud or other `requirements.txt` based deployments,
+use the repository-level requirements file:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
 For development with tests and linting:
 
 ```bash

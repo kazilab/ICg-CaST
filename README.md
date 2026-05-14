@@ -119,6 +119,9 @@ python -m pip install -e ".[app]"
 streamlit run streamlit_app.py
 ```
 
+For `requirements.txt` based Streamlit deployments, install with
+`python -m pip install -r requirements.txt`.
+
 The Streamlit app writes results under `outputs/streamlit/<run-name>` and
 wraps simulation, demo, training/evaluation, graph export, and benchmark
 workflows.
