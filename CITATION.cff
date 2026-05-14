@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+# Note: title/version are kept in sync with src/icg_cast/_branding.py.
+message: "If you use ICg-CaST, cite the software package and the relevant theory manuscript."
+title: "ICg-CaST: Integrated Carcinogenomics Causal State Theory"
+version: "0.1.0.dev0"
+date-released: 2026-05-14
+authors:
+  - family-names: "contributors"
+    given-names: "ICg-CaST"
+license: "Apache-2.0"
+abstract: "Synthetic causal-state simulation and mechanism-bottleneck benchmarking for integrated carcinogenomics theory development."
