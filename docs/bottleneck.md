@@ -1,7 +1,5 @@
 # Mechanism-Bottleneck Causal Networks (MB-CNet)
 
-PLAN.md reference: section 7.5 and Milestone 3.5.
-
 MB-CNet is ICg-CaST's primary methodological contribution. It is a two-stage
 model whose risk predictions are forced to flow through a hidden layer pinned
 to the qAOP latent state vector. The bottleneck pin is what converts the
@@ -35,15 +33,33 @@ state_final_driver_count_proxy
 state_final_immune_clearance
 ```
 
-Stage 1 is a `MultiOutputRegressor` (default: `RandomForestRegressor`).
+Stage 1 is a `MultiOutputRegressor` (default: `RandomForestRegressor`). Pass a
+custom sklearn-compatible `stage1_estimator` to swap in a stronger latent-state
+recoverer while preserving the bottleneck contract:
+
+```python
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+
+model = MechanismBottleneckClassifier(
+    stage1_estimator=MultiOutputRegressor(HistGradientBoostingRegressor()),
+)
+```
+
+For the default stage-1 pipeline, NaN-valued omics features are imputed with
+`SimpleImputer(strategy="mean", add_indicator=True)`. The added indicators make
+modality dropout observable to the stage-1 regressor instead of silently
+collapsing masked values onto the feature mean. After fitting, call
+`model.missingness_report()` to audit per-feature missing fractions by modality.
+
 Stage 2 has three available kinds:
 
 - **`calibrated_logistic`** (v0.1 default) — unconstrained logistic regression
   with isotonic calibration.
 - **`sign_constrained`** — `SignConstrainedLogisticRegression`; coefficients
-  per bottleneck unit are bounded to the half-line implied by `STRUCTURAL_SIGNS`
-  (e.g. `state_final_immune_clearance` must have a non-positive coefficient
-  because greater immune clearance must reduce predicted risk).
+  per bottleneck unit are bounded to the half-line implied by coefficient-card
+  `effect_direction` metadata. `STRUCTURAL_SIGNS` remains as a derived
+  compatibility export, not the source of truth.
 - **`sign_constrained_augmented`** — the same sign constraints, but stage 2
   is additionally trained on intervention-implied synthetic samples drawn
   through `augment_with_interventions` using the simulator's
@@ -94,7 +110,7 @@ The binary `future_cancer_transition_event` column from
 `simulate_cohort` is preserved unchanged; the survival columns are purely
 additive.
 
-## Acceptance criteria (PLAN.md §7.5, Milestone 3.5)
+## Acceptance criteria
 
 - `bottleneck_recovery.csv` reports per-state recovery R² — see
   [outputs/bottleneck_v0_5/per_state_recovery_r2.csv](../outputs/bottleneck_v0_5/per_state_recovery_r2.csv).

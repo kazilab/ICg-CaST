@@ -9,6 +9,7 @@ The starter-kit logic has been migrated into the package under `src/icg_cast`.
 :caption: User Guide
 
 theory
+quickstart
 simulation
 cli
 streamlit_app
@@ -29,11 +30,9 @@ coefficients
 
 ```{toctree}
 :maxdepth: 2
-:caption: Governance And Manuscript Notes
+:caption: Governance
 
 ethics_and_limitations
-manuscript_differentiation_section
-manuscript_results_section
 ```
 
 Reference dictionaries live under `materials/`:

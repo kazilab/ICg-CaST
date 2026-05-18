@@ -45,6 +45,24 @@ python -m pip install -e ".[dev]"
 
 ## Quickstart
 
+Mental model for domain scientists:
+
+1. Choose or simulate a chemical exposure profile as a 10-dimensional KCC vector.
+2. The simulator turns KCC activity into time-varying qAOP state trajectories
+   such as DNA adducts, ROS, inflammation, proliferation, and clone fraction.
+3. MB-CNet learns a bottleneck that predicts those qAOP states from omics-like
+   observations before predicting future transition risk.
+4. `do_*` interventions perturb bottleneck states and check whether predicted
+   risk moves in the biologically expected direction.
+
+Prefer a browser workflow before using the CLI? Install the optional app extra
+and run the local Streamlit app:
+
+```bash
+python -m pip install -e ".[app]"
+streamlit run streamlit_app.py
+```
+
 Generate a synthetic cohort:
 
 ```bash
@@ -125,13 +143,6 @@ icg-cast bench run \
   --months 36
 ```
 
-Run the local browser app:
-
-```bash
-python -m pip install -e ".[app]"
-streamlit run streamlit_app.py
-```
-
 For `requirements.txt` based Streamlit deployments, install with
 `python -m pip install -r requirements.txt`.
 
@@ -141,7 +152,8 @@ workflows.
 
 ## Documentation and Materials
 
-Project documentation starts at `docs/index.md`. Field and intervention
+Project documentation starts at `docs/index.md`; the shortest conceptual
+route is `docs/quickstart.md`. Field and intervention
 dictionaries live under `materials/`:
 
 Build the documentation locally:
@@ -154,6 +166,7 @@ make docs
 - `materials/data_dictionary.csv`
 - `materials/intervention_dictionary.csv`
 - `materials/provenance_template.json`
+- `materials/calibration_provenance.schema.json`
 
 Optional real-data adapters live under `icg_cast.data_sources`. They accept
 local files only and record provenance; they do not download public datasets.

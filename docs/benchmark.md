@@ -1,7 +1,5 @@
 # ICg-Bench
 
-PLAN.md reference: Milestone 5.5.
-
 ICg-Bench is the package's public causal benchmark: a versioned set of
 synthetic data-generating processes (DGPs) with full ground truth plus four
 scored tasks. The DGPs are *synthetic on purpose* — that is the only setting
@@ -97,6 +95,11 @@ Leaderboard files are append-only CSV plus a full-history JSON
 
 This means a leaderboard entry can be re-run from its CSV row alone.
 
+The leaderboard reader and writers enforce `schema_version == "0.1"` at
+runtime. Future schema changes should add explicit migrations in
+`migrate_leaderboard_entries`; unsupported versions fail closed instead of
+being silently reinterpreted.
+
 ## CLI
 
 ```bash
@@ -104,9 +107,19 @@ icg-cast bench list                                                # registered 
 icg-cast bench info misspecified_signs                             # inspect one variant, prints flipped signs
 icg-cast bench run --cohort linear_lowhet --variant v0_1 --seed 7  # one (cohort, variant, seed) experiment
 icg-cast bench audit --cohort linear_lowhet --variant sign_constrained --seed 7
-icg-cast bench sweep                                               # full 5×3×3 sweep -> outputs/bottleneck_v0_5/
-icg-cast bench plots                                               # manuscript figures -> outputs/figures/
+icg-cast bench sweep --outdir outputs/bottleneck_v0_5              # full 5×3×3 sweep
+icg-cast bench plots --inputdir outputs/bottleneck_v0_5 --outdir outputs/figures
 ```
+
+`bench run` includes a `wall_clock_seconds` block in its JSON output. The
+canonical sweep writes the same timing fields (`generate_seconds`,
+`fit_seconds`, `total_seconds`, etc.) to `per_seed.csv` and summarizes total
+runtime in `summary.csv`.
+
+The standalone sweep and plotting scripts accept the same `--outdir` /
+`--inputdir` paths. Their defaults still point at `outputs/...`, but directory
+creation now checks write access and benchmark/figure outputs fall back to a
+temporary directory when the default location is unavailable.
 
 The current canonical sweep lives at
 [outputs/bottleneck_v0_5/](../outputs/bottleneck_v0_5/) and the figures it

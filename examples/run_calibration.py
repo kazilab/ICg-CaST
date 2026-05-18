@@ -1,4 +1,4 @@
-"""End-to-end demonstration of the Milestone 7 calibration prototype.
+"""End-to-end demonstration of the calibration prototype.
 
 This example writes tiny synthetic mock files to a temporary directory, builds
 an opt-in calibration bundle from them, and runs a small simulator cohort plus

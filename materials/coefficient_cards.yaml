@@ -1,5 +1,4 @@
 # ICg-CaST coefficient registry
-# PLAN.md reference: section 25 (Coefficient credibility roadmap), Milestones 8-9.
 #
 # Every numeric coefficient that drives the qAOP dynamics, the latent_risk
 # equation, the chemical archetype tables, and the host susceptibility
@@ -22,6 +21,10 @@
 # Prior distributions:
 #   "auto" lets the loader choose fixed/string, lognormal/signed-lognormal,
 #   logit-normal, or Dirichlet based on value shape and evidence level.
+#
+# effect_direction:
+#   Optional net direction of effect on downstream cancer-transition risk:
+#   +1 harmful/increases risk, -1 protective/decreases risk, 0 neutral/unknown.
 
 schema_version: "0.2"
 
@@ -234,9 +237,10 @@ cards:
 
   - name: dynamics.mutation_rate.scale
     default_value: 0.0012
+    effect_direction: 1
     units: "mutations per Mb per division (synthetic scale)"
     evidence_level: "E4"
-    notes: "rough order-of-magnitude for somatic mutation per division before amplification"
+    notes: "rough order-of-magnitude for somatic mutation per division before amplification; mutation_rate affects risk indirectly through driver_count_proxy"
 
   - name: dynamics.mutation_rate.dna_kcc2_coupling
     default_value: 4.8
@@ -261,6 +265,15 @@ cards:
   # ------------------------------------------------------------------ #
   # qAOP dynamics — driver count proxy                                 #
   # ------------------------------------------------------------------ #
+  # ``driver_count_proxy`` is an *unclipped* monotonically-increasing  #
+  # synthetic burden score, not a literal driver-mutation count.       #
+  # It is compressed by log1p inside the latent_risk equation, so its #
+  # numerical range (which can reach the low hundreds over a 72-month #
+  # horizon) does not destabilise the risk arithmetic, but it should  #
+  # not be interpreted as "number of driver mutations." The `_proxy`  #
+  # suffix on the column name and on `state_final_driver_count_proxy` #
+  # is deliberate.                                                    #
+  # ------------------------------------------------------------------ #
 
   - name: dynamics.driver_count.intercept
     default_value: 0.35
@@ -279,6 +292,17 @@ cards:
 
   # ------------------------------------------------------------------ #
   # qAOP dynamics — clone fraction                                     #
+  # ------------------------------------------------------------------ #
+  # The recurrence is                                                  #
+  #     clone <- clone * exp(selection * (1 - clone) + noise)          #
+  # — a Ricker / Gompertz-style update (multiplicative, not logistic). #
+  # Practical consequences:                                            #
+  #   * a clone that drifts down toward `min` recovers slowly because  #
+  #     each month's update is multiplicative;                         #
+  #   * `selection_noise_sigma` enters multiplicatively via exp(noise) #
+  #     so its effect on the clone scale grows with current clone size;#
+  #   * the (1 - clone) term provides density dependence but does not  #
+  #     guarantee logistic-style boundedness at the cap.               #
   # ------------------------------------------------------------------ #
 
   - name: dynamics.clone_fraction.init_scale
@@ -380,6 +404,38 @@ cards:
     notes: "upper clip on effective immune clearance"
 
   # ------------------------------------------------------------------ #
+  # qAOP dynamics — antioxidant transform                              #
+  # ------------------------------------------------------------------ #
+  # Mirrors the repair-KCC3 and immune-KCC7 modulation patterns:       #
+  # KCC5 (oxidative-stress generation) also depletes antioxidant       #
+  # reserve (glutathione consumption, NADPH burden, mitochondrial      #
+  # ROS leak), so high-KCC5 chemicals erode the host's antioxidant     #
+  # buffer in addition to driving ROS upstream. Effective antioxidant  #
+  # capacity is therefore ``susceptibility * (1 - kcc5_depletion *     #
+  # k5)`` clipped to [min, max]; this clipped value enters the         #
+  # ros_retention term via D.ros_antioxidant_strength * antioxidant.   #
+  # Note: KCC5 now appears in both the ROS *input* and the ROS         #
+  # *retention*, so a do(KCC5 := x) intervention has two coupled       #
+  # routes; downstream falsification variants should keep this in      #
+  # mind.                                                              #
+  # ------------------------------------------------------------------ #
+
+  - name: dynamics.antioxidant.kcc5_depletion
+    default_value: 0.35
+    units: "dimensionless"
+    notes: "KCC5 (oxidative stress) depletion of antioxidant reserve"
+
+  - name: dynamics.antioxidant.min
+    default_value: 0.15
+    units: "dimensionless"
+    notes: "lower clip on effective antioxidant capacity"
+
+  - name: dynamics.antioxidant.max
+    default_value: 1.25
+    units: "dimensionless"
+    notes: "upper clip on effective antioxidant capacity"
+
+  # ------------------------------------------------------------------ #
   # qAOP dynamics — dose modulation (per-month)                        #
   # ------------------------------------------------------------------ #
 
@@ -409,7 +465,7 @@ cards:
     notes: "spread of per-month dose pulse multiplier"
 
   # ------------------------------------------------------------------ #
-  # latent_risk equation (the reference oracle, see Milestone 11)      #
+  # latent_risk equation (the reference oracle)                        #
   # ------------------------------------------------------------------ #
 
   - name: dynamics.latent_risk.intercept
@@ -419,43 +475,56 @@ cards:
 
   - name: dynamics.latent_risk.dna_coupling
     default_value: 1.20
+    effect_direction: 1
     units: "logit / unit log1p(DNA_adducts)"
     notes: "DNA_adducts -> risk slope (log-scaled)"
 
   - name: dynamics.latent_risk.ros_coupling
     default_value: 0.70
+    effect_direction: 1
     units: "logit / unit log1p(ROS)"
     notes: "ROS -> risk slope (log-scaled)"
 
   - name: dynamics.latent_risk.inflammation_coupling
     default_value: 0.95
+    effect_direction: 1
     units: "logit / unit log1p(inflammation)"
     notes: "inflammation -> risk slope (log-scaled)"
 
   - name: dynamics.latent_risk.proliferation_coupling
     default_value: 1.50
+    effect_direction: 1
     units: "logit"
     notes: "proliferation -> risk slope (linear)"
 
   - name: dynamics.latent_risk.epigenetic_coupling
     default_value: 0.85
+    effect_direction: 1
     units: "logit / unit log1p(epigenetic_age)"
     notes: "epigenetic_age -> risk slope (log-scaled)"
 
   - name: dynamics.latent_risk.driver_coupling
     default_value: 1.80
+    effect_direction: 1
     units: "logit / unit log1p(driver_count_proxy)"
     notes: "driver count -> risk slope (log-scaled)"
 
   - name: dynamics.latent_risk.clone_coupling
     default_value: 4.50
+    effect_direction: 1
     units: "logit / unit clone_fraction"
     notes: "clone fraction -> risk slope (linear)"
 
   - name: dynamics.latent_risk.immune_coupling
-    default_value: 0.90
+    default_value: -0.90
+    effect_direction: -1
     units: "logit / unit immune_clearance"
-    notes: "immune clearance -> risk slope (linear, *subtracts*)"
+    notes: |
+      Immune clearance -> risk slope (linear). The minus sign lives in the
+      coefficient (default_value=-0.90) rather than in the equation form,
+      so callers can apply it uniformly as `coef * x` without having to
+      consult the equation. ``effect_direction`` remains -1 and is the
+      source of truth for sign-constrained models.
 
   # ------------------------------------------------------------------ #
   # Host susceptibility distributions                                  #
@@ -645,6 +714,402 @@ cards:
     default_value: 0.05
     units: "dimensionless"
     notes: "Gaussian noise added to each archetype KCC component per subject"
+
+  - name: benchmark.continuous_kcc.noise_sigma
+    default_value: 0.07
+    units: "dimensionless"
+    notes: "Gaussian noise added to a Dirichlet-mixed continuous KCC vector (nonlinear_mixhost generator)"
+
+  # ================================================================== #
+  # Benchmark variant: nonlinear_mixhost                                #
+  # ------------------------------------------------------------------ #
+  # Full qAOP-dynamics coefficients for the non-linear KCC->state      #
+  # recurrence used by ``_simulate_state_trajectory_nonlinear``. These #
+  # are intentionally distinct from the ``dynamics.*`` baseline; the   #
+  # nonlinear variant introduces squared KCC terms in the genotoxic /  #
+  # ROS inputs, a tanh-saturated proliferation, and a kcc4*kcc5        #
+  # interaction in the epigenetic-age recurrence.                      #
+  # ------------------------------------------------------------------ #
+
+  # repair / immune transforms
+  - name: benchmark.nonlinear_mixhost.dynamics.repair.kcc3_inhibition
+    default_value: 0.35
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.repair.min
+    default_value: 0.15
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.repair.max
+    default_value: 1.2
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.immune.kcc7_inhibition
+    default_value: 0.45
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.immune.min
+    default_value: 0.05
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.immune.max
+    default_value: 1.2
+    units: "dimensionless"
+
+  # antioxidant transform (mirrors the repair/immune KCC modulation pattern;
+  # depletion magnitude is bumped from 0.35 to 0.45 in the nonlinear variant
+  # to match the stronger nonlinear KCC->ROS coupling).
+  - name: benchmark.nonlinear_mixhost.dynamics.antioxidant.kcc5_depletion
+    default_value: 0.45
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.antioxidant.min
+    default_value: 0.05
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.antioxidant.max
+    default_value: 1.25
+    units: "dimensionless"
+
+  # dose modulation
+  - name: benchmark.nonlinear_mixhost.dynamics.dose.cyclical_baseline
+    default_value: 0.85
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dose.cyclical_amplitude
+    default_value: 0.15
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dose.cyclical_period_months
+    default_value: 12.0
+    units: "months"
+  - name: benchmark.nonlinear_mixhost.dynamics.dose.pulse_lognormal_mean
+    default_value: -0.02
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.dynamics.dose.pulse_lognormal_sigma
+    default_value: 0.18
+    units: "log-units"
+
+  # DNA adducts (with KCC power non-linearities)
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.decay
+    default_value: 0.68
+    units: "monthly retention coefficient in (0, 1)"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.repair_strength
+    default_value: 0.36
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.max
+    default_value: 20.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc1_intercept
+    default_value: 0.20
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc1_slope
+    default_value: 1.35
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc1_power
+    default_value: 1.4
+    units: "dimensionless"
+    notes: "exponent on KCC1 in the DNA-adduct input"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc2_intercept
+    default_value: 0.25
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc2_slope
+    default_value: 1.10
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.dna_adducts.input_kcc2_power
+    default_value: 1.3
+    units: "dimensionless"
+    notes: "exponent on KCC2 in the DNA-adduct input"
+
+  # ROS (with KCC power non-linearities)
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.decay
+    default_value: 0.74
+    units: "monthly retention coefficient in (0, 1)"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.antioxidant_strength
+    default_value: 0.42
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.max
+    default_value: 20.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.input_intercept
+    default_value: 0.10
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.input_kcc5_slope
+    default_value: 1.45
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.input_kcc5_power
+    default_value: 1.3
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.input_kcc1_slope
+    default_value: 0.35
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.ros.input_kcc1_power
+    default_value: 1.2
+    units: "dimensionless"
+
+  # cytotoxicity
+  - name: benchmark.nonlinear_mixhost.dynamics.cytotoxicity.intercept
+    default_value: -2.2
+    units: "logit-units"
+  - name: benchmark.nonlinear_mixhost.dynamics.cytotoxicity.dna_coupling
+    default_value: 0.35
+    units: "logit per unit DNA-adducts"
+  - name: benchmark.nonlinear_mixhost.dynamics.cytotoxicity.ros_coupling
+    default_value: 0.25
+    units: "logit per unit ROS"
+
+  # inflammation (with kcc6 power non-linearity)
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.decay
+    default_value: 0.80
+    units: "monthly retention coefficient in (0, 1)"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.ros_coupling
+    default_value: 0.10
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.cytotoxicity_coupling
+    default_value: 0.35
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.dose_kcc6_coupling
+    default_value: 0.95
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.kcc6_power
+    default_value: 1.2
+    units: "dimensionless"
+    notes: "exponent on KCC6 in the dose-driven inflammation input"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.immune_clearance
+    default_value: 0.24
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.inflammation.max
+    default_value: 20.0
+    units: "dimensionless"
+
+  # epigenetic age (with kcc4*kcc5 interaction)
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.background_rate
+    default_value: 0.011
+    units: "per month"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.dose_kcc4_coupling
+    default_value: 0.055
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.dose_kcc5_coupling
+    default_value: 0.018
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.dose_kcc6_coupling
+    default_value: 0.018
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.kcc4_kcc5_interaction
+    default_value: 0.040
+    units: "dimensionless"
+    notes: "multiplicative KCC4*KCC5 interaction term in epi-age increment"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.ros_coupling
+    default_value: 0.003
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.epigenetic_age.max
+    default_value: 50.0
+    units: "dimensionless"
+
+  # proliferation (tanh-saturated, then rescaled to [0, 1] via *0.5 + 0.5)
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.intercept
+    default_value: -0.6
+    units: "pre-tanh units"
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.inflammation_coupling
+    default_value: 0.27
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.cytotoxicity_coupling
+    default_value: 0.20
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.dose_kcc8_coupling
+    default_value: 1.15
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.kcc10_coupling
+    default_value: 0.90
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.proliferation.epigenetic_coupling
+    default_value: 0.16
+    units: "dimensionless"
+
+  # mutation rate
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.scale
+    default_value: 0.0012
+    units: "per month"
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.dna_kcc2_coupling
+    default_value: 4.8
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.ros_coupling
+    default_value: 1.2
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.repair_deficit_coupling
+    default_value: 2.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.proliferation_coupling
+    default_value: 0.9
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.mutation_rate.max
+    default_value: 1.0
+    units: "per month"
+
+  # driver count
+  - name: benchmark.nonlinear_mixhost.dynamics.driver_count.intercept
+    default_value: 0.35
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.driver_count.proliferation_coupling
+    default_value: 2.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.driver_count.kcc9_coupling
+    default_value: 0.35
+    units: "dimensionless"
+
+  # clone fraction (initialisation + additive selection recurrence)
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.init_scale
+    default_value: 1.0e-5
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.init_lognormal_sigma
+    default_value: 0.45
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.min
+    default_value: 1.0e-8
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.max
+    default_value: 0.99
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_intercept
+    default_value: -0.020
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_proliferation
+    default_value: 0.36
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_inflammation
+    default_value: 0.080
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_epigenetic
+    default_value: 0.050
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_kcc9
+    default_value: 0.22
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_immune
+    default_value: 0.26
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_drivers
+    default_value: 0.10
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dynamics.clone_fraction.selection_noise_sigma
+    default_value: 0.006
+    units: "dimensionless"
+
+  # latent risk
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.intercept
+    default_value: -7.5
+    units: "logit-units"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.dna_coupling
+    default_value: 1.20
+    units: "logit per log1p unit"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.ros_coupling
+    default_value: 0.70
+    units: "logit per log1p unit"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.inflammation_coupling
+    default_value: 0.95
+    units: "logit per log1p unit"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.proliferation_coupling
+    default_value: 1.50
+    units: "logit per unit proliferation"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.epigenetic_coupling
+    default_value: 0.85
+    units: "logit per log1p unit"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.driver_coupling
+    default_value: 1.80
+    units: "logit per log1p unit"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.clone_coupling
+    default_value: 4.50
+    units: "logit per unit clone fraction"
+  - name: benchmark.nonlinear_mixhost.dynamics.latent_risk.immune_coupling
+    default_value: -0.90
+    units: "logit per unit immune"
+    notes: "negative sign in the coefficient (see dynamics.latent_risk.immune_coupling)"
+
+  # Cohort wrapper: continuous KCC sampling, dose distribution, hazard scale
+  - name: benchmark.nonlinear_mixhost.continuous_kcc.dirichlet_alpha
+    default_value: 0.5
+    units: "dimensionless"
+    notes: "Dirichlet concentration over archetype mixtures for continuous KCC sampling"
+  - name: benchmark.nonlinear_mixhost.dose.lognormal_mean
+    default_value: -0.10
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.dose.lognormal_sigma
+    default_value: 1.10
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.dose.min
+    default_value: 0.02
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.dose.max
+    default_value: 8.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.event_hazard_scale
+    default_value: 0.020
+    units: "per unit cumulative hazard"
+    notes: |
+      Multiplier on the simulator's cumulative hazard. The per-month
+      ``latent_risk`` is a sigmoid output interpreted as a per-month event
+      probability ``p_t``; cumulative hazard is ``Σ_t -log(1 - p_t)`` and
+      ``future_event_probability = 1 - exp(-event_hazard_scale *
+      cumulative_hazard)``. At ``event_hazard_scale = 1`` this collapses to
+      the canonical ``1 - Π_t (1 - p_t)``.
+
+  # ------------------------------------------------------------------ #
+  # Host susceptibility distributions: high-heterogeneity overlay      #
+  # Used by ``generate_nonlinear_mixhost`` via a registry overlay on   #
+  # the susceptibility.* cards above, so ``_sample_susceptibility`` is #
+  # reused unchanged in the wider-prior regime.                        #
+  # ------------------------------------------------------------------ #
+  - name: benchmark.nonlinear_mixhost.susceptibility.repair_capacity.mean
+    default_value: 0.82
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.repair_capacity.sd
+    default_value: 0.28
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.repair_capacity.min
+    default_value: 0.25
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.repair_capacity.max
+    default_value: 1.40
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.antioxidant_capacity.mean
+    default_value: 0.85
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.antioxidant_capacity.sd
+    default_value: 0.27
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.antioxidant_capacity.min
+    default_value: 0.25
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.antioxidant_capacity.max
+    default_value: 1.40
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.immune_surveillance.mean
+    default_value: 0.82
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.immune_surveillance.sd
+    default_value: 0.32
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.immune_surveillance.min
+    default_value: 0.15
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.immune_surveillance.max
+    default_value: 1.50
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.detox_balance.lognormal_mean
+    default_value: 0.0
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.susceptibility.detox_balance.lognormal_sigma
+    default_value: 0.35
+    units: "log-units"
+  - name: benchmark.nonlinear_mixhost.susceptibility.detox_balance.min
+    default_value: 0.45
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.detox_balance.max
+    default_value: 1.95
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.baseline_proliferation.mean
+    default_value: 0.0
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.baseline_proliferation.sd
+    default_value: 0.85
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.baseline_proliferation.min
+    default_value: -1.8
+    units: "dimensionless"
+  - name: benchmark.nonlinear_mixhost.susceptibility.baseline_proliferation.max
+    default_value: 1.8
+    units: "dimensionless"
 
   # ================================================================== #
   # Transcriptomic module readouts (omics.py)                          #
@@ -907,6 +1372,14 @@ cards:
   - name: omics.signature_mix.primary_weight_ros_coeff
     default_value: 0.06
     units: "weight"
+  - name: omics.signature_mix.primary_weight_center
+    default_value: 0.45
+    units: "weight score"
+    notes: "center of the logistic transform for primary signature weight"
+  - name: omics.signature_mix.primary_weight_scale
+    default_value: 0.20
+    units: "weight score"
+    notes: "positive scale of the logistic transform for primary signature weight"
   - name: omics.signature_mix.primary_weight_min
     default_value: 0.05
     units: "weight"

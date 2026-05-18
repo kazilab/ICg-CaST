@@ -4,8 +4,8 @@ ICg-CaST defaults to synthetic data. Optional data-source adapters are
 local-file loaders for future calibration or validation workflows. They do not
 download files, call remote APIs, or handle controlled-access data.
 
-> For the Milestone 7 calibration prototype that consumes these adapters to
-> override pieces of the synthetic simulator and theory graph, see
+> For the calibration prototype that consumes these adapters to override
+> pieces of the synthetic simulator and theory graph, see
 > [docs/calibration.md](calibration.md).
 
 Each adapter returns a `DataSourceBundle` with:
@@ -30,9 +30,17 @@ Each adapter returns a `DataSourceBundle` with:
 
 ## Provenance
 
-Use `materials/provenance_template.json` as the minimum record for any
-user-supplied source. The maintainer must fill in source version, retrieval
-date, license terms, and citation before using real data in analysis.
+Use `materials/provenance_template.json` as the minimum payload shape for any
+user-supplied source. Runtime validation in `icg_cast.data_sources` enforces
+the same required fields, a local-file path, and a lowercase SHA-256 digest.
+The machine-readable schema is
+`materials/calibration_provenance.schema.json`.
+
+`icg-cast calibrate` writes `calibration_provenance.json` with
+`schema_version: "0.1"`, one provenance record per adapter, and optional
+`coefficient_updates` when `--apply-coefficients` is used. The maintainer must
+fill in source version, retrieval date, license terms, and citation before
+using real data in analysis.
 
 ## Access and License Notes
 

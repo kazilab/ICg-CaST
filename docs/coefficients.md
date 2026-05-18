@@ -1,16 +1,13 @@
 # Coefficient registry
 
-PLAN.md reference: section 25 (Coefficient credibility roadmap),
-Milestones 8 and 9.
-
 Every numeric coefficient that drives the qAOP dynamics, the `latent_risk`
 equation, the chemical archetype tables, and the host susceptibility
 distributions is declared in
 [materials/coefficient_cards.yaml](../materials/coefficient_cards.yaml)
 and loaded through [src/icg_cast/coefficients/](../src/icg_cast/coefficients/).
 
-Inline numeric literals in those code sites are forbidden going forward
-(PLAN.md §17.5). A pytest spot-check in
+Inline numeric literals in those code sites are forbidden. A pytest
+spot-check in
 [tests/test_coefficient_registry.py](../tests/test_coefficient_registry.py)
 catches the most obvious slips.
 
@@ -21,6 +18,7 @@ catches the most obvious slips.
   default_value: 0.68
   units: "month^-1"
   evidence_level: E4
+  effect_direction: 1
   prior_distribution: auto
   prior_params: {}
   source: "starter kit (PLAN.md sections 6 and 7)"
@@ -34,6 +32,7 @@ Fields:
 |------------------|:--------:|---------|
 | `name`           | yes | Dotted namespace; must be unique. |
 | `default_value`  | yes | Scalar (float/int), vector (list of numbers), or string label. |
+| `effect_direction` | no | Net direction of effect on downstream risk: `1` harmful/increases risk, `-1` protective/decreases risk, `0` neutral/unknown. Used by MB-CNet sign constraints. |
 | `units`          | no  | Free-text units description. |
 | `evidence_level` | no  | One of `E1`..`E5`. Default `E5` (no source). |
 | `prior_distribution` | no | One of `auto`, `fixed`, `normal`, `lognormal`, `signed_lognormal`, `logit_normal`, or `dirichlet`. Default `auto`. |
@@ -54,9 +53,9 @@ Top-level `defaults` apply to every card unless the card overrides them.
 | `E4` | Expert estimate, plausible biological order of magnitude. |
 | `E5` | No source ("hand-tuned to produce interesting cohorts"). |
 
-A coefficient is flagged "load-bearing" when Milestone 12's sensitivity
-audit shows >20% effect on any downstream metric; load-bearing
-coefficients must reach at least `E2`.
+A coefficient is flagged "load-bearing" when the sensitivity audit
+(`icg-cast coeffs sensitivity`) shows >20% effect on any downstream metric;
+load-bearing coefficients must reach at least `E2`.
 
 ## Coefficient uncertainty
 
@@ -138,7 +137,7 @@ icg-cast make-demo --coefficient-mode prior_sample --coefficient-seed 42
 touches the registry. It surfaces the registry's evidence-level
 distribution and is intended to be wired into review prompts.
 
-## Coverage status (Milestones 8-9 complete)
+## Coverage status
 
 | Site | Status |
 |------|--------|
@@ -165,10 +164,9 @@ Current registry breakdown (run `icg-cast coeffs audit` to refresh):
 
 Of these, **9 are `E4`** (archetype KCC vectors and the mutation-rate
 scale, where there is at least a literature order of magnitude) and the
-remaining 209 are `E5`. The `E5` count is the canonical pre-Phase-3
-baseline. Calibration updates from Milestone 10 are expected to upgrade
-the COSMIC-tied signature, ToxCast-tied KCC, AOP-Wiki-tied coupling, and
-LINCS-tied transcriptomic module coefficients out of `E5`.
+remaining 209 are `E5`. Calibration adapters can upgrade the COSMIC-tied
+signature, ToxCast-tied KCC, AOP-Wiki-tied coupling, and LINCS-tied
+transcriptomic module coefficients out of `E5`.
 
 ## How to edit a coefficient
 
@@ -185,18 +183,3 @@ LINCS-tied transcriptomic module coefficients out of `E5`.
 4. Run `icg-cast coeffs audit` and paste the table into the PR
    description.
 
-## Roadmap
-
-Milestone 8 covers traceability, and Milestone 9 adds seedable
-coefficient uncertainty. The next phases are:
-- **Milestone 10** — calibration adapters (COSMIC, LINCS, ToxCast,
-  AOP-Wiki) gain ownership of specific coefficient groups and can
-  upgrade evidence levels.
-- **Milestone 11** — split `starter_kit_latent_risk` into
-  `reference_risk_oracle()` and `biological_risk_equation()` to remove
-  the circularity between MB-CNet's labelling oracle and its conformity
-  metric.
-- **Milestone 12** — per-coefficient sensitivity audit, with `<1%` and
-  `>20%` auto-flags.
-- **Milestone 13** — domain-expert review process via
-  `materials/coefficient_review.csv`.

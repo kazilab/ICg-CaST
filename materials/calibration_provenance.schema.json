@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://icg-cast.local/schemas/calibration_provenance.schema.json",
+  "title": "ICg-CaST calibration provenance",
+  "type": "object",
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "coefficient_updates": {
+      "type": ["object", "null"]
+    }
+  },
+  "patternProperties": {
+    "^(?!schema_version$|coefficient_updates$)[A-Za-z0-9_.-]+$": {
+      "$ref": "#/$defs/provenance_record"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "provenance_record": {
+      "type": "object",
+      "required": [
+        "source_name",
+        "source_version",
+        "retrieval_date",
+        "local_file",
+        "license_notes",
+        "citation",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retrieval_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_file": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "^(https?|ftp|s3|gs)://"
+          }
+        },
+        "license_notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

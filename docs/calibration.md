@@ -1,4 +1,4 @@
-# Public-data calibration prototype (Milestone 7)
+# Public-data calibration prototype
 
 ICg-CaST is synthetic by default. The calibration prototype is an opt-in
 layer that lets user-supplied local files from COSMIC, LINCS, ToxCast,
@@ -74,7 +74,9 @@ icg-cast graph \
   `icg_cast.load_calibration_bundle(path)`.
 * `calibration_provenance.json` — the per-source provenance records (source
   name, version, retrieval date, local file path, SHA-256 digest, license/
-  citation placeholders) returned by every adapter.
+  citation placeholders) returned by every adapter. This file is versioned
+  with `schema_version: "0.1"` and validated at runtime against the same field
+  contract documented in `materials/calibration_provenance.schema.json`.
 
 ## Tiny end-to-end example
 
@@ -89,7 +91,7 @@ python examples/run_calibration.py
 
 The script never touches real data.
 
-## Acceptance criteria (from PLAN.md §12, Milestone 7)
+## Acceptance criteria
 
 - [x] User-supplied COSMIC SBS file loader: `load_cosmic_sbs_matrix` and the
       `calibrate_signatures_from_cosmic` calibrator.

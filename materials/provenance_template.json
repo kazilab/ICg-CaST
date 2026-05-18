@@ -1,9 +1,13 @@
 {
-  "source_name": "source display name",
-  "source_version": "user_supplied",
-  "retrieval_date": "YYYY-MM-DD",
-  "local_file": "path/to/local/file",
-  "license_notes": "maintainer must verify",
-  "citation": "maintainer must fill",
-  "sha256": "computed by adapter"
+  "schema_version": "0.1",
+  "cosmic": {
+    "source_name": "source display name",
+    "source_version": "user_supplied",
+    "retrieval_date": "YYYY-MM-DD",
+    "local_file": "path/to/local/file",
+    "license_notes": "maintainer must verify",
+    "citation": "maintainer must fill",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "coefficient_updates": {}
 }
