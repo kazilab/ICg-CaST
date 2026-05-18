@@ -32,6 +32,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import pandas as pd
@@ -46,6 +47,10 @@ from ._branding import (
 )
 from .benchmark import dgp as _dgp
 from .benchmark import generate
+from .benchmark.conformity_bootstrap import (
+    responsive_conformity_from_table,
+    responsive_passes_from_table,
+)
 from .biology.biological_risk_equation import biological_risk_equation
 from .bottleneck import (
     DEFAULT_BOTTLENECK_UNITS,
@@ -61,7 +66,15 @@ from .coefficients import EVIDENCE_LEVELS
 from .coefficients import registry as _coeff_registry
 from .coefficients import save_registry as _save_coeff_registry
 from .config import SimConfig
+from .data_sources import calibration_provenance_payload
 from .graph import write_theory_graph
+from .interventions import (
+    EXPECTED_DIRECTIONS_DGP_OVERRIDES,
+    EXPECTED_DIRECTIONS_PRIOR,
+    INTERVENTIONS,
+    dgp_directions,
+    risk_function_directions,
+)
 from .io import ensure_dir, write_cohort, write_simulation_metadata
 from .models import biological_coherence_summary, evaluate_bundle, train_baselines
 from .oracle.reference_risk_oracle import reference_risk_oracle
@@ -70,65 +83,13 @@ from .simulator import simulate_cohort
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-
-_INTERVENTIONS: dict[str, dict[str, float]] = {
-    "do_DNA_repair_rescue":             {"state_final_DNA_adducts":        0.55},
-    "do_ROS_inflammation_blockade":     {"state_final_ROS":                0.50,
-                                         "state_final_inflammation":       0.50},
-    "do_epigenetic_memory_reset":       {"state_final_epigenetic_age":     0.45},
-    "do_proliferation_suppression":     {"state_final_proliferation":      0.50},
-    "do_immune_surveillance_restore":   {"state_final_immune_clearance":   1.50},
-    "do_repair_inhibition":             {"state_final_DNA_adducts":        1.80},
-    "do_artificial_proliferation":      {"state_final_proliferation":      1.80},
-}
-
-
-_EXPECTED_DIRECTIONS_PRIOR: dict[str, int] = {
-    "do_DNA_repair_rescue":           -1,
-    "do_ROS_inflammation_blockade":   -1,
-    "do_epigenetic_memory_reset":     -1,
-    "do_proliferation_suppression":   -1,
-    "do_immune_surveillance_restore": -1,
-    "do_repair_inhibition":           +1,
-    "do_artificial_proliferation":    +1,
-}
-
-
-_EXPECTED_DIRECTIONS_DGP_OVERRIDES: dict[str, dict[str, int]] = {
-    "misspecified_signs": {
-        "do_epigenetic_memory_reset": +1,
-    },
-    "misspecified_signs_v2": {
-        "do_epigenetic_memory_reset": +1,
-        "do_immune_surveillance_restore": +1,
-    },
-}
-
-
-def _dgp_directions(cohort: str) -> dict[str, int]:
-    base = dict(_EXPECTED_DIRECTIONS_PRIOR)
-    base.update(_EXPECTED_DIRECTIONS_DGP_OVERRIDES.get(cohort, {}))
-    return base
-
-
-def _risk_function_directions(
-    states: pd.DataFrame,
-    interventions: dict[str, dict[str, float]],
-    risk_fn,
-    *,
-    tolerance: float = 1e-6,
-) -> dict[str, int]:
-    """Infer intervention directions from a risk equation on true states."""
-    base = np.asarray(risk_fn(states), dtype=float)
-    directions: dict[str, int] = {}
-    for name, spec in interventions.items():
-        after = states.copy()
-        for unit, scale in spec.items():
-            if unit in after.columns:
-                after[unit] = after[unit].astype(float) * float(scale)
-        delta = float(np.mean(np.asarray(risk_fn(after), dtype=float) - base))
-        directions[name] = 0 if abs(delta) < tolerance else int(np.sign(delta))
-    return directions
+# Backwards-compatible private aliases. Prefer importing the public names from
+# ``icg_cast.interventions`` directly in new code.
+_INTERVENTIONS = INTERVENTIONS
+_EXPECTED_DIRECTIONS_PRIOR = EXPECTED_DIRECTIONS_PRIOR
+_EXPECTED_DIRECTIONS_DGP_OVERRIDES = EXPECTED_DIRECTIONS_DGP_OVERRIDES
+_dgp_directions = dgp_directions
+_risk_function_directions = risk_function_directions
 
 
 def _parse_csv_list(arg: str | None) -> list[str] | None:
@@ -188,6 +149,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         event_hazard_scale=args.event_hazard_scale,
         coefficient_mode=args.coefficient_mode,
         coefficient_seed=args.coefficient_seed,
+        simulator_backend=args.simulator_backend,
     )
     calibration = (
         load_calibration_bundle(args.calibration) if args.calibration is not None else None
@@ -262,9 +224,12 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
             calibrated,
             outdir / "calibrated_coefficients.yaml",
         )
-        bundle.provenance["coefficient_updates"] = coefficient_summary
+    provenance_payload = calibration_provenance_payload(
+        bundle.provenance,
+        coefficient_updates=coefficient_summary,
+    )
     provenance_path.write_text(
-        json.dumps(bundle.provenance, indent=2) + "\n", encoding="utf-8"
+        json.dumps(provenance_payload, indent=2) + "\n", encoding="utf-8"
     )
     summary = {
         "calibration_sources": sorted(bundle.provenance),
@@ -355,7 +320,7 @@ def _cmd_coeffs_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_coeffs_sensitivity(args: argparse.Namespace) -> int:
-    """Run the Milestone 12 coefficient sensitivity audit."""
+    """Run the coefficient sensitivity audit."""
     from icg_cast.audit.coefficient_sensitivity import run_coefficient_sensitivity_audit
 
     cfg = SimConfig(
@@ -492,7 +457,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
 
 def _cmd_make_demo(args: argparse.Namespace) -> int:
     """Run the complete reproducible demo workflow in one command."""
-    outdir = ensure_dir(args.outdir)
+    outdir = ensure_dir(args.outdir, fallback_prefix="icg-cast-demo-")
     simulate_args = argparse.Namespace(
         n=args.n,
         months=args.months,
@@ -500,6 +465,7 @@ def _cmd_make_demo(args: argparse.Namespace) -> int:
         event_hazard_scale=args.event_hazard_scale,
         coefficient_mode=args.coefficient_mode,
         coefficient_seed=args.coefficient_seed,
+        simulator_backend=args.simulator_backend,
         outdir=outdir,
         no_plots=args.no_plots,
         calibration=None,
@@ -556,6 +522,7 @@ def _cmd_make_demo(args: argparse.Namespace) -> int:
             "event_hazard_scale": args.event_hazard_scale,
             "coefficient_mode": args.coefficient_mode,
             "coefficient_seed": args.coefficient_seed,
+            "simulator_backend": args.simulator_backend,
             "target": args.target,
             "test_size": args.test_size,
             "plots": not args.no_plots,
@@ -615,7 +582,10 @@ def _cmd_bench_run(args: argparse.Namespace) -> int:
     )
     from sklearn.model_selection import train_test_split
 
+    total_t0 = perf_counter()
+    generate_t0 = perf_counter()
     df, _ = generate(args.cohort, n=args.n, months=args.months, seed=args.seed)
+    generate_seconds = perf_counter() - generate_t0
     feat = _omics_feature_columns(df)
     bcols = [c for c in DEFAULT_BOTTLENECK_UNITS if c in df.columns]
     X = df[feat].copy()
@@ -625,35 +595,46 @@ def _cmd_bench_run(args: argparse.Namespace) -> int:
     tr, te = train_test_split(idx, test_size=args.test_size, stratify=y, random_state=args.seed)
 
     mb = _make_variant(args.variant, feat, bcols, seed=args.seed)
+    fit_t0 = perf_counter()
     mb.fit(X.iloc[tr].join(S.iloc[tr]), y[tr])
+    fit_seconds = perf_counter() - fit_t0
+    predict_t0 = perf_counter()
     proba = mb.predict_proba(X.iloc[te])[:, 1]
+    predict_seconds = perf_counter() - predict_t0
 
     auroc = float(roc_auc_score(y[te], proba))
     auprc = float(average_precision_score(y[te], proba))
-    brier = float(brier_score_loss(y[te], np.clip(proba, 1e-6, 1 - 1e-6)))
+    brier = float(brier_score_loss(y[te], proba))
 
     rec = mb.score_recovery(X.iloc[te], S.iloc[te])
     r2_mean = float(rec["recovery_r2"].mean())
 
     prior_conf, prior_tab = mb.score_intervention_conformity(
         X.iloc[te], interventions=_INTERVENTIONS, expected_directions=_EXPECTED_DIRECTIONS_PRIOR,
+        responsive_threshold=args.responsive_threshold,
     )
     dgp_dirs = _dgp_directions(args.cohort)
     dgp_conf, dgp_tab = mb.score_intervention_conformity(
         X.iloc[te], interventions=_INTERVENTIONS, expected_directions=dgp_dirs,
+        responsive_threshold=args.responsive_threshold,
     )
     oracle_dirs = _risk_function_directions(S.iloc[te], _INTERVENTIONS, reference_risk_oracle)
     oracle_conf, oracle_tab = mb.score_intervention_conformity(
         X.iloc[te], interventions=_INTERVENTIONS, expected_directions=oracle_dirs,
+        responsive_threshold=args.responsive_threshold,
     )
     biology_dirs = _risk_function_directions(S.iloc[te], _INTERVENTIONS, biological_risk_equation)
     biology_conf, biology_tab = mb.score_intervention_conformity(
         X.iloc[te], interventions=_INTERVENTIONS, expected_directions=biology_dirs,
+        responsive_threshold=args.responsive_threshold,
     )
     deltas = prior_tab["mean_risk_change"].to_numpy(dtype=float)
     expected_dgp = np.array([dgp_dirs[i] for i in prior_tab["intervention"]], dtype=int)
-    responsive = (np.sign(deltas) == np.sign(expected_dgp)) & (np.abs(deltas) >= args.responsive_threshold)
-    responsive_dgp = float(responsive.mean())
+    responsive_dgp = responsive_conformity_from_table(
+        deltas,
+        expected_dgp,
+        threshold=args.responsive_threshold,
+    )
 
     print(json.dumps({
         "cohort": args.cohort, "variant": args.variant, "seed": args.seed,
@@ -665,6 +646,12 @@ def _cmd_bench_run(args: argparse.Namespace) -> int:
         "oracle_conformity":         float(oracle_conf),
         "biology_conformity":        float(biology_conf),
         "responsive_dgp_conformity": responsive_dgp,
+        "wall_clock_seconds": {
+            "generate": generate_seconds,
+            "fit": fit_seconds,
+            "predict": predict_seconds,
+            "total": perf_counter() - total_t0,
+        },
     }, indent=2))
     if args.write_intervention_csv is not None:
         merged = prior_tab.rename(columns={
@@ -677,7 +664,11 @@ def _cmd_bench_run(args: argparse.Namespace) -> int:
         merged["expected_direction_oracle"] = [oracle_dirs[i] for i in merged["intervention"]]
         merged["passes_biology"]           = biology_tab["passed_directionality"].to_numpy()
         merged["expected_direction_biology"] = [biology_dirs[i] for i in merged["intervention"]]
-        merged["responsive_dgp"]           = responsive
+        merged["responsive_dgp"]           = responsive_passes_from_table(
+            deltas,
+            expected_dgp,
+            threshold=args.responsive_threshold,
+        )
         merged.to_csv(args.write_intervention_csv, index=False)
         print(f"wrote intervention CSV -> {args.write_intervention_csv}", file=sys.stderr)
     return 0
@@ -738,7 +729,8 @@ def _cmd_bench_sweep(args: argparse.Namespace) -> int:
         print(f"sweep script not found at {script}", file=sys.stderr)
         return 2
     import subprocess
-    return subprocess.call([sys.executable, str(script)])
+    outdir = ensure_dir(args.outdir, fallback_prefix="icg-cast-bench-")
+    return subprocess.call([sys.executable, str(script), "--outdir", str(outdir)])
 
 
 def _cmd_bench_plots(args: argparse.Namespace) -> int:
@@ -747,7 +739,15 @@ def _cmd_bench_plots(args: argparse.Namespace) -> int:
         print(f"plot script not found at {script}", file=sys.stderr)
         return 2
     import subprocess
-    return subprocess.call([sys.executable, str(script)])
+    outdir = ensure_dir(args.outdir, fallback_prefix="icg-cast-figures-")
+    return subprocess.call([
+        sys.executable,
+        str(script),
+        "--inputdir",
+        str(args.inputdir),
+        "--outdir",
+        str(outdir),
+    ])
 
 
 # ----------------------------------------------------------------------
@@ -775,6 +775,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="seed for --coefficient-mode prior_sample (defaults to --seed)",
+    )
+    p_sim.add_argument(
+        "--simulator-backend",
+        choices=["python", "vectorized"],
+        default="python",
+        help="state-recurrence backend; vectorized is faster for large cohorts",
     )
     p_sim.add_argument("--outdir", type=Path, default=Path("outputs/demo"))
     p_sim.add_argument(
@@ -863,7 +869,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     coeffs = sub.add_parser(
         "coeffs",
-        help="inspect the coefficient registry (PLAN.md section 25, Milestones 8-9)",
+        help="inspect the coefficient registry",
     )
     csub = coeffs.add_subparsers(dest="coeffs_cmd", required=True)
     p_coeffs_list = csub.add_parser("list", help="list coefficient cards")
@@ -887,7 +893,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_coeffs_audit.set_defaults(func=_cmd_coeffs_audit)
     p_coeffs_sensitivity = csub.add_parser(
         "sensitivity",
-        help="run the Milestone 12 0.5x/1x/2x coefficient sensitivity audit",
+        help="run the 0.5x/1x/2x coefficient sensitivity audit",
     )
     p_coeffs_sensitivity.add_argument("--outdir", type=Path, default=Path("outputs/audit"))
     p_coeffs_sensitivity.add_argument("--n", type=int, default=120)
@@ -918,6 +924,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="seed for --coefficient-mode prior_sample (defaults to --seed)",
     )
+    p_demo.add_argument(
+        "--simulator-backend",
+        choices=["python", "vectorized"],
+        default="python",
+        help="state-recurrence backend; vectorized is faster for large cohorts",
+    )
     p_demo.add_argument("--outdir", type=Path, default=Path("outputs/demo"))
     p_demo.add_argument("--target", default="future_cancer_transition_event")
     p_demo.add_argument("--test-size", type=float, default=0.30)
@@ -947,9 +959,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run.set_defaults(func=_cmd_bench_run)
 
     p_sweep = bsub.add_parser("sweep", help="run the full multi-seed multi-cohort sweep")
+    p_sweep.add_argument("--outdir", type=Path, default=_REPO_ROOT / "outputs" / "bottleneck_v0_5")
     p_sweep.set_defaults(func=_cmd_bench_sweep)
 
     p_plots = bsub.add_parser("plots", help="render manuscript figures from cached artifacts")
+    p_plots.add_argument("--inputdir", type=Path, default=_REPO_ROOT / "outputs" / "bottleneck_v0_5")
+    p_plots.add_argument("--outdir", type=Path, default=_REPO_ROOT / "outputs" / "figures")
     p_plots.set_defaults(func=_cmd_bench_plots)
 
     p_audit = bsub.add_parser(

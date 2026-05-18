@@ -42,6 +42,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import pandas as pd
@@ -63,6 +64,7 @@ from icg_cast.bottleneck import (  # noqa: E402
     MechanismBottleneckClassifier,
     starter_kit_latent_risk,
 )
+from icg_cast.io import ensure_dir  # noqa: E402
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -78,7 +80,7 @@ COHORTS: tuple[str, ...] = (
     "misspecified_signs_v2",
 )
 VARIANTS: tuple[str, ...] = ("v0_1", "sign_constrained", "sign_constrained_augmented")
-OUTDIR = REPO_ROOT / "outputs" / "bottleneck_v0_5"
+DEFAULT_OUTDIR = REPO_ROOT / "outputs" / "bottleneck_v0_5"
 
 # Default bootstrap draws for 95% equal-tailed CIs on conformity scores.
 # Override with ``--bootstrap N`` or env ``ICG_N_BOOTSTRAP`` (higher = slower sweep).
@@ -150,6 +152,12 @@ class ExperimentResult:
     responsive_dgp_ci_hi: float
     per_intervention: pd.DataFrame
     best_baseline_auroc: float
+    generate_seconds: float
+    baseline_seconds: float
+    fit_seconds: float
+    predict_seconds: float
+    bootstrap_seconds: float
+    total_seconds: float
 
 
 def _omics_feature_columns(df: pd.DataFrame) -> list[str]:
@@ -229,7 +237,10 @@ def _run_one(
     *,
     n_bootstrap: int,
 ) -> ExperimentResult:
+    total_t0 = perf_counter()
+    generate_t0 = perf_counter()
     df, _ = generate(cohort_name, n=1200, months=72, seed=seed)
+    generate_seconds = perf_counter() - generate_t0
     feature_cols = _omics_feature_columns(df)
     bottleneck_cols = [c for c in DEFAULT_BOTTLENECK_UNITS if c in df.columns]
 
@@ -240,13 +251,19 @@ def _run_one(
     idx = np.arange(len(df))
     tr, te = train_test_split(idx, test_size=0.30, stratify=y, random_state=seed)
 
+    baseline_t0 = perf_counter()
     bl = _baselines(X.iloc[tr], y[tr], X.iloc[te], y[te], seed=seed)
+    baseline_seconds = perf_counter() - baseline_t0
     best_bl_auc = float(bl["auroc"].max())
 
     mb = _make_variant(variant, feature_cols, bottleneck_cols, seed=seed)
+    fit_t0 = perf_counter()
     mb.fit(X.iloc[tr].join(S.iloc[tr]), y[tr])
+    fit_seconds = perf_counter() - fit_t0
 
+    predict_t0 = perf_counter()
     proba = mb.predict_proba(X.iloc[te])[:, 1]
+    predict_seconds = perf_counter() - predict_t0
     auc = float(roc_auc_score(y[te], proba))
     ap = float(average_precision_score(y[te], proba))
     br = float(brier_score_loss(y[te], np.clip(proba, 1e-6, 1 - 1e-6)))
@@ -286,6 +303,7 @@ def _run_one(
     responsive_dgp = float(responsive[scored].mean()) if scored.any() else float("nan")
     merged["responsive_dgp"] = responsive
 
+    bootstrap_t0 = perf_counter()
     boot = bootstrap_conformity(
         mb, X.iloc[te], INTERVENTIONS,
         EXPECTED_DIRECTIONS_PRIOR, dgp_dirs,
@@ -293,6 +311,7 @@ def _run_one(
         random_state=seed + 10_000,
         responsive_threshold=RESPONSIVE_THRESHOLD,
     )
+    bootstrap_seconds = perf_counter() - bootstrap_t0
     (_, p_lo, p_hi) = boot["prior_conformity"]
     (_, d_lo, d_hi) = boot["dgp_conformity"]
     (_, r_lo, r_hi) = boot["responsive_dgp_conformity"]
@@ -308,6 +327,12 @@ def _run_one(
         responsive_dgp_ci_lo=r_lo, responsive_dgp_ci_hi=r_hi,
         per_intervention=merged,
         best_baseline_auroc=best_bl_auc,
+        generate_seconds=generate_seconds,
+        baseline_seconds=baseline_seconds,
+        fit_seconds=fit_seconds,
+        predict_seconds=predict_seconds,
+        bootstrap_seconds=bootstrap_seconds,
+        total_seconds=perf_counter() - total_t0,
     )
 
 
@@ -340,6 +365,12 @@ def main(argv: list[str] | None = None) -> None:
         metavar="CSV",
         help="comma-separated subset of v0_1,sign_constrained,sign_constrained_augmented",
     )
+    parser.add_argument(
+        "--outdir",
+        type=Path,
+        default=DEFAULT_OUTDIR,
+        help="directory for benchmark CSV/JSON artifacts",
+    )
     args = parser.parse_args(argv)
     n_boot = args.bootstrap
     if n_boot is None:
@@ -365,9 +396,10 @@ def main(argv: list[str] | None = None) -> None:
     else:
         variants = VARIANTS
 
-    OUTDIR.mkdir(parents=True, exist_ok=True)
+    outdir = ensure_dir(args.outdir, fallback_prefix="icg-cast-bench-")
     print(
-        f"n_bootstrap={n_boot}  cohorts={list(cohorts)}  variants={list(variants)}",
+        f"n_bootstrap={n_boot}  cohorts={list(cohorts)}  variants={list(variants)}  "
+        f"outdir={outdir}",
         flush=True,
     )
 
@@ -410,10 +442,16 @@ def main(argv: list[str] | None = None) -> None:
             "dgp_conformity_ci_hi":      r.dgp_conformity_ci_hi,
             "responsive_dgp_ci_lo":      r.responsive_dgp_ci_lo,
             "responsive_dgp_ci_hi":      r.responsive_dgp_ci_hi,
+            "generate_seconds":          r.generate_seconds,
+            "baseline_seconds":          r.baseline_seconds,
+            "fit_seconds":               r.fit_seconds,
+            "predict_seconds":           r.predict_seconds,
+            "bootstrap_seconds":         r.bootstrap_seconds,
+            "total_seconds":             r.total_seconds,
         }
         for r in results
     ])
-    per_seed.to_csv(OUTDIR / "per_seed.csv", index=False)
+    per_seed.to_csv(outdir / "per_seed.csv", index=False)
 
     summary_rows = []
     for (cohort, variant), sub in per_seed.groupby(["cohort", "variant"], sort=False):
@@ -424,6 +462,7 @@ def main(argv: list[str] | None = None) -> None:
         dconf_m, dconf_s = _agg(sub["dgp_conformity"])
         rconf_m, rconf_s = _agg(sub["responsive_dgp_conformity"])
         bl_m, bl_s = _agg(sub["best_baseline_auroc"])
+        total_sec_m, total_sec_s = _agg(sub["total_seconds"])
         summary_rows.append({
             "cohort": cohort, "variant": variant,
             "n_seeds": int(len(sub)),
@@ -434,9 +473,10 @@ def main(argv: list[str] | None = None) -> None:
             "prior_conformity_mean":          pconf_m, "prior_conformity_sd":          pconf_s,
             "dgp_conformity_mean":            dconf_m, "dgp_conformity_sd":            dconf_s,
             "responsive_dgp_conformity_mean": rconf_m, "responsive_dgp_conformity_sd": rconf_s,
+            "total_seconds_mean": total_sec_m, "total_seconds_sd": total_sec_s,
         })
     summary = pd.DataFrame(summary_rows)
-    summary.to_csv(OUTDIR / "summary.csv", index=False)
+    summary.to_csv(outdir / "summary.csv", index=False)
 
     print("\n=== aggregated (mean ± SD over seeds {7,13,31}) ===")
     show = summary.copy()
@@ -451,7 +491,7 @@ def main(argv: list[str] | None = None) -> None:
     show["auroc_gap"] = show["auroc_gap_mean"].map("{:+.3f}".format) + " ± " + show["auroc_gap_sd"].map("{:.3f}".format)
     print(show[["cohort", "variant", "auroc", "auroc_gap", "recovery_r2", "prior_conformity", "dgp_conformity", "responsive_dgp_conformity"]].to_string(index=False))
 
-    with open(OUTDIR / "summary.json", "w", encoding="utf-8") as f:
+    with open(outdir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(
             {
                 "seeds": list(SEEDS),
@@ -470,7 +510,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for r in results:
         tag = f"{r.cohort}__{r.variant}__seed{r.seed}"
-        r.per_intervention.to_csv(OUTDIR / f"intervention_conformity__{tag}.csv", index=False)
+        r.per_intervention.to_csv(outdir / f"intervention_conformity__{tag}.csv", index=False)
 
     per_state_rows: list[dict[str, float | str | int]] = []
     for r in results:
@@ -479,10 +519,14 @@ def main(argv: list[str] | None = None) -> None:
                 "cohort": r.cohort, "variant": r.variant, "seed": r.seed,
                 "bottleneck_unit": unit, "recovery_r2": float(r2),
             })
-    pd.DataFrame(per_state_rows).to_csv(OUTDIR / "per_state_recovery_r2.csv", index=False)
+    pd.DataFrame(per_state_rows).to_csv(outdir / "per_state_recovery_r2.csv", index=False)
 
-    print(f"\nartifacts written under {OUTDIR.relative_to(REPO_ROOT)}/  "
-          f"(files: {len(list(OUTDIR.iterdir()))})")
+    try:
+        display_outdir = outdir.relative_to(REPO_ROOT)
+    except ValueError:
+        display_outdir = outdir
+    print(f"\nartifacts written under {display_outdir}/  "
+          f"(files: {len(list(outdir.iterdir()))})")
 
 
 if __name__ == "__main__":

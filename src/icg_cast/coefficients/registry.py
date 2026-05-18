@@ -8,6 +8,9 @@ Card schema::
 
     name:            dotted namespace, e.g. ``dynamics.dna_adducts.decay``
     default_value:   scalar (float/int), vector (list of numbers), or string
+    effect_direction:
+                    optional net direction of effect on downstream risk
+                    (-1 protective, +1 harmful, 0 neutral/unknown)
     units:           free-text units description
     evidence_level:  one of E1..E5 (see below)
     source:          DOI, dataset name, or ``"starter kit"``
@@ -35,7 +38,7 @@ from __future__ import annotations
 import contextvars
 import functools
 import os
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -65,6 +68,7 @@ class CoefficientCard:
 
     name: str
     default_value: _ScalarValue
+    effect_direction: int | None = None
     units: str = ""
     evidence_level: str = "E5"
     source: str = ""
@@ -87,6 +91,14 @@ class CoefficientCard:
         if not isinstance(self.prior_params, Mapping):
             raise ValueError(f"card {self.name!r} prior_params must be a mapping")
         object.__setattr__(self, "prior_params", dict(self.prior_params))
+        if self.effect_direction is not None:
+            direction = int(self.effect_direction)
+            if direction not in (-1, 0, 1):
+                raise ValueError(
+                    f"card {self.name!r} has invalid effect_direction "
+                    f"{self.effect_direction!r}; expected -1, 0, 1, or null"
+                )
+            object.__setattr__(self, "effect_direction", direction)
         # normalise list/tuple vectors to immutable tuples of floats so the
         # cached registry returns the same object identity each call.
         v = self.default_value
@@ -104,7 +116,7 @@ class CoefficientCard:
         return isinstance(self.default_value, str)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "name": self.name,
             "default_value": (
                 list(self.default_value) if self.is_vector else self.default_value
@@ -117,6 +129,9 @@ class CoefficientCard:
             "prior_distribution": self.prior_distribution,
             "prior_params": dict(self.prior_params),
         }
+        if self.effect_direction is not None:
+            out["effect_direction"] = self.effect_direction
+        return out
 
 
 class CoefficientRegistry:
@@ -266,6 +281,11 @@ def load_registry(path: str | Path | None = None) -> CoefficientRegistry:
             CoefficientCard(
                 name=str(merged["name"]),
                 default_value=merged["default_value"],
+                effect_direction=(
+                    None
+                    if merged.get("effect_direction") is None
+                    else int(merged["effect_direction"])
+                ),
                 units=str(merged.get("units", "")),
                 evidence_level=str(merged.get("evidence_level", "E5")),
                 source=str(merged.get("source", "")),
@@ -293,6 +313,23 @@ _active_registry: contextvars.ContextVar[CoefficientRegistry | None] = contextva
     "icg_cast_active_coefficient_registry",
     default=None,
 )
+
+
+# Caches that derive values from the active registry register themselves here at
+# import time. ``clear_registry_derived_caches()`` clears all of them at once so
+# the simulator does not have to enumerate them by name.
+_REGISTRY_DERIVED_CACHES: list[Callable[[], None]] = []
+
+
+def register_registry_derived_cache(clear: Callable[[], None]) -> None:
+    """Register a ``cache_clear``-style callable to be invoked on registry swaps."""
+    _REGISTRY_DERIVED_CACHES.append(clear)
+
+
+def clear_registry_derived_caches() -> None:
+    """Clear every cache that was derived from a coefficient registry."""
+    for clear in _REGISTRY_DERIVED_CACHES:
+        clear()
 
 
 @contextmanager

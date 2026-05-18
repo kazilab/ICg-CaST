@@ -41,18 +41,9 @@ def calibration_curve(
     n_bins: int = 10,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return per-bin (mean_predicted, observed_fraction, n) for a reliability plot."""
-    y = np.asarray(y, dtype=int)
-    proba = np.asarray(proba, dtype=float)
-    bins = np.linspace(0.0, 1.0, n_bins + 1)
-    bin_id = np.clip(np.digitize(proba, bins, right=True) - 1, 0, n_bins - 1)
-    mean_pred = np.full(n_bins, np.nan)
-    obs_frac = np.full(n_bins, np.nan)
-    counts = np.zeros(n_bins, dtype=int)
-    for i in range(n_bins):
-        mask = bin_id == i
-        n = int(mask.sum())
-        counts[i] = n
-        if n:
-            mean_pred[i] = float(proba[mask].mean())
-            obs_frac[i] = float(y[mask].mean())
+    table = calibration_metrics(np.asarray(y), np.asarray(proba), n_bins=n_bins)
+    bins = table[table["bin"] != "summary"].sort_values("bin")
+    mean_pred = bins["mean_predicted_risk"].to_numpy(dtype=float)
+    obs_frac = bins["observed_event_rate"].to_numpy(dtype=float)
+    counts = bins["n"].to_numpy(dtype=int)
     return mean_pred, obs_frac, counts

@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from icg_cast.data_sources import (
+    calibration_provenance_payload,
     load_aopdb_export,
     load_aopwiki_export,
     load_cosmic_sbs_matrix,
@@ -16,6 +17,8 @@ from icg_cast.data_sources import (
     load_sigprofiler_activities,
     load_toxcast_summary,
     map_aop_to_theory_graph,
+    validate_calibration_provenance,
+    validate_provenance_record,
 )
 from icg_cast.signatures import mutation_context_labels
 
@@ -123,3 +126,30 @@ def test_aopdb_loader_can_read_local_sqlite_export(tmp_path: Path) -> None:
 def test_adapters_reject_remote_paths() -> None:
     with pytest.raises(ValueError, match="local files only"):
         load_gdc_manifest("https://example.org/gdc_manifest.csv")
+
+
+def test_provenance_schema_validation_rejects_incomplete_records(tmp_path: Path) -> None:
+    path = _write_csv(tmp_path / "mock.csv", [{"id": "row1", "value": 1.5}])
+    bundle = load_lincs_signatures(path)
+
+    assert validate_provenance_record(bundle.provenance)["source_name"].startswith("LINCS L1000")
+
+    broken = dict(bundle.provenance)
+    broken["sha256"] = "not-a-digest"
+    with pytest.raises(ValueError, match="sha256"):
+        validate_provenance_record(broken)
+
+
+def test_calibration_provenance_payload_is_versioned(tmp_path: Path) -> None:
+    path = _write_csv(tmp_path / "mock.csv", [{"id": "row1", "value": 1.5}])
+    bundle = load_lincs_signatures(path)
+
+    payload = calibration_provenance_payload(
+        {"lincs": bundle.provenance},
+        coefficient_updates={"n_updates": 1},
+    )
+
+    assert payload["schema_version"] == "0.1"
+    assert payload["lincs"]["sha256"] == bundle.provenance["sha256"]
+    assert payload["coefficient_updates"]["n_updates"] == 1
+    assert validate_calibration_provenance(payload) == payload

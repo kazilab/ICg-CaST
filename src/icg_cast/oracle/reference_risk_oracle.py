@@ -1,6 +1,6 @@
 """Frozen benchmark labelling oracle for ICg-CaST.
 
-Version ``v1.0`` is the original starter-kit latent-risk structural equation.
+Version ``v1.0`` is the latent-risk structural equation.
 It is used only as a benchmark oracle. Biological refinements belong in
 ``icg_cast.biology.biological_risk_equation``.
 """
@@ -37,12 +37,18 @@ def _column(
     kwargs: Mapping[str, Any],
     key: str,
     n: int | None,
+    *,
+    strict: bool = True,
 ) -> np.ndarray:
     aliases = _ALIASES[key]
     if isinstance(data, pd.DataFrame):
         for name in aliases:
             if name in data.columns:
                 return np.clip(data[name].to_numpy(dtype=float), 0.0, None)
+        if strict:
+            raise KeyError(
+                f"missing state column for {key!r}; expected one of {aliases!r}"
+            )
         return np.zeros(len(data), dtype=float)
 
     source: Mapping[str, Any] = kwargs if data is None else {**dict(data), **dict(kwargs)}
@@ -52,6 +58,8 @@ def _column(
             if arr.ndim == 0:
                 arr = np.repeat(float(arr), 1 if n is None else n)
             return np.clip(arr, 0.0, None)
+    if strict:
+        raise KeyError(f"missing state value for {key!r}; expected one of {aliases!r}")
     return np.zeros(1 if n is None else n, dtype=float)
 
 
@@ -74,6 +82,9 @@ def reference_risk_oracle(
 
     ``states`` may be a DataFrame with ``state_final_*`` columns, a mapping of
     state names to values, or omitted in favour of keyword arguments.
+
+    Bounded state variables, including ``clone_fraction``, enter linearly by
+    design. Burden/count variables use ``log1p`` to compress unbounded scales.
     """
     n = _infer_n(states, kwargs)
     dna = _column(states, kwargs, "dna_adducts", n)
@@ -104,4 +115,3 @@ def reference_risk_oracle(
 def get_oracle_version() -> str:
     """Return the frozen oracle version."""
     return ORACLE_VERSION
-

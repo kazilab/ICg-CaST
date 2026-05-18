@@ -1,7 +1,5 @@
 """ICg-Bench: a public causal benchmark with a known data-generating process.
 
-PLAN.md reference: Milestone 5.5.
-
 Four scored tasks:
 
 1. ``task_risk_prediction``        AUROC / AUPRC / Brier / calibration on held-out subjects.
@@ -26,7 +24,15 @@ from .generators import (
     generate_partial_observability,
     list_generator_names,
 )
-from .leaderboard import LeaderboardEntry, append_entry, write_leaderboard
+from .leaderboard import (
+    LeaderboardEntry,
+    LeaderboardSchemaError,
+    append_entry,
+    load_leaderboard,
+    migrate_leaderboard_entries,
+    validate_leaderboard_entry,
+    write_leaderboard,
+)
 from .scoring import BenchmarkResult, run_benchmark, score_summary
 from .tasks import (
     task_cross_host_generalization,
@@ -48,7 +54,11 @@ __all__ = [
     "generate_partial_observability",
     "list_generator_names",
     "LeaderboardEntry",
+    "LeaderboardSchemaError",
     "append_entry",
+    "load_leaderboard",
+    "migrate_leaderboard_entries",
+    "validate_leaderboard_entry",
     "write_leaderboard",
     "BenchmarkResult",
     "run_benchmark",

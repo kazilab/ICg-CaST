@@ -1,4 +1,4 @@
-"""Public-data calibration prototype for ICg-CaST (Milestone 7).
+"""Public-data calibration prototype for ICg-CaST.
 
 The calibration layer consumes the local-file adapters in
 ``icg_cast.data_sources`` and produces opt-in overrides for the synthetic

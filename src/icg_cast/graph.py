@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -64,10 +65,12 @@ def build_theory_graph(calibration: CalibrationBundle | None = None) -> nx.DiGra
 
     if calibration is not None:
         if calibration.graph_edges:
+            skipped = 0
             for row in calibration.graph_edges:
                 src = str(row.get("source"))
                 tgt = str(row.get("target"))
                 if not src or not tgt or src == "None" or tgt == "None":
+                    skipped += 1
                     continue
                 attrs = {k: v for k, v in row.items() if k not in {"source", "target"}}
                 attrs.setdefault("source_name", "AOP-Wiki")
@@ -75,6 +78,13 @@ def build_theory_graph(calibration: CalibrationBundle | None = None) -> nx.DiGra
                     if node not in graph:
                         graph.add_node(node, node_type="enriched", source_name="AOP-Wiki")
                 graph.add_edge(src, tgt, **attrs)
+            if skipped:
+                warnings.warn(
+                    f"skipped {skipped}/{len(calibration.graph_edges)} calibration "
+                    "graph edges with missing or null source/target endpoints",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         if calibration.graph_node_attributes:
             for node, attrs in calibration.graph_node_attributes.items():
                 if node not in graph:

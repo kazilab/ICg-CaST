@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .coefficients import register_registry_derived_cache
 from .coefficients import registry as _registry
 
 if TYPE_CHECKING:
@@ -60,6 +61,9 @@ def _sig_coeffs() -> _SignatureCoefficients:
     )
 
 
+register_registry_derived_cache(_sig_coeffs.cache_clear)
+
+
 def mutation_context_labels() -> list[str]:
     """Return the 96 SBS-style trinucleotide contexts used by the toy simulator."""
     bases = ["A", "C", "G", "T"]
@@ -77,14 +81,21 @@ def make_signature_profiles(
 ) -> tuple[list[str], dict[str, np.ndarray]]:
     """Create simplified 96-channel profiles for synthetic experiments only.
 
+    The built-in ``*_like`` profiles are heuristic stress-test patterns, not
+    literature-accurate COSMIC SBS profiles. Provide calibrated profiles for
+    biologically faithful mutational signatures.
+
     If a :class:`CalibrationBundle` with calibrated signature profiles is
     provided, calibrated profiles are merged in and override any toy profile
     with the same name. Toy profiles required by the default
     ``ARCHETYPE_SIGNATURE`` mapping but absent from the bundle are preserved so
-    the simulator can still resolve every archetype.
+    the simulator can still resolve every archetype. When calibrated labels use
+    a different ordering, preserved toy profiles are reordered into that label
+    order; incompatible label sets are rejected.
     """
     S = _sig_coeffs()
-    labels = mutation_context_labels()
+    toy_labels = mutation_context_labels()
+    labels = toy_labels
     profiles: dict[str, np.ndarray] = {}
 
     def normalized(weights: np.ndarray) -> np.ndarray:
@@ -92,10 +103,10 @@ def make_signature_profiles(
         return weights / weights.sum()
 
     rng = np.random.default_rng(S.seed)
-    background = rng.gamma(shape=S.gamma_shape, scale=S.gamma_scale, size=len(labels))
+    background = rng.gamma(shape=S.gamma_shape, scale=S.gamma_scale, size=len(toy_labels))
 
     w = background.copy()
-    for i, label in enumerate(labels):
+    for i, label in enumerate(toy_labels):
         if "[C>T]" in label:
             w[i] += S.aging_ct
         if label.startswith(("A[C>T]G", "C[C>T]G", "G[C>T]G", "T[C>T]G")):
@@ -103,7 +114,7 @@ def make_signature_profiles(
     profiles["aging"] = normalized(w)
 
     w = background.copy()
-    for i, label in enumerate(labels):
+    for i, label in enumerate(toy_labels):
         if "[C>A]" in label:
             w[i] += S.sbs4_ca
             if label.endswith(("A", "T")):
@@ -111,7 +122,7 @@ def make_signature_profiles(
     profiles["SBS4_like"] = normalized(w)
 
     w = background.copy()
-    for i, label in enumerate(labels):
+    for i, label in enumerate(toy_labels):
         if "[C>A]" in label:
             w[i] += S.sbs24_ca
             if label[0] in {"G", "T"} and label[-1] in {"G", "C"}:
@@ -119,7 +130,7 @@ def make_signature_profiles(
     profiles["SBS24_like"] = normalized(w)
 
     w = background.copy()
-    for i, label in enumerate(labels):
+    for i, label in enumerate(toy_labels):
         if "[T>A]" in label:
             w[i] += S.sbs22_ta
             if label[0] in {"C", "T"}:
@@ -127,7 +138,7 @@ def make_signature_profiles(
     profiles["SBS22_like"] = normalized(w)
 
     w = background.copy()
-    for i, label in enumerate(labels):
+    for i, label in enumerate(toy_labels):
         if "[C>A]" in label or "[C>G]" in label:
             w[i] += S.ox_ca_or_cg
         if "[T>G]" in label:
@@ -137,7 +148,17 @@ def make_signature_profiles(
     if calibration is not None:
         calibrated = calibration.signature_profile_arrays()
         if calibrated is not None:
-            labels, override = calibrated
+            calibrated_labels, override = calibrated
+            if calibrated_labels != toy_labels:
+                if set(calibrated_labels) != set(toy_labels):
+                    raise ValueError(
+                        "calibrated signature_labels must be a permutation of "
+                        "mutation_context_labels() when partial calibration is used"
+                    )
+                toy_index = {label: i for i, label in enumerate(toy_labels)}
+                permutation = [toy_index[label] for label in calibrated_labels]
+                profiles = {name: arr[permutation] for name, arr in profiles.items()}
+            labels = calibrated_labels
             for name, arr in override.items():
                 profiles[name] = arr
     return labels, profiles

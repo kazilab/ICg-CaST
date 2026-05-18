@@ -9,6 +9,11 @@ under a user-supplied conservation table::
     HRTI = conserved_human_KE_activation
           / (conserved_human_KE_activation + rodent_specific_KE_activation)
 
+The canonical score preserves that denominator. Conserved key events that are
+active in rodents but inactive in humans are reported separately and in a
+coverage-adjusted score, because they can represent species divergence rather
+than missing evidence.
+
 Inputs are intentionally explicit and column-typed: this module reasons about
 mechanism-level activations supplied by the caller. It does **not** wrap a
 classifier, look up KE conservation databases, or make regulatory claims.
@@ -37,11 +42,19 @@ class HRTIResult:
     reasons: list[str]
     """Per-key-event annotations explaining the contribution."""
 
+    n_conserved_inactive_in_human: int = 0
+    """Count of conserved KEs active in rodents but inactive in humans."""
+
+    coverage_adjusted_score: float = float("nan")
+    """Score penalizing conserved rodent-active KEs that are inactive in humans."""
+
     def to_dict(self) -> dict[str, object]:
         return {
             "hrti_score": float(self.score),
+            "coverage_adjusted_hrti_score": float(self.coverage_adjusted_score),
             "n_conserved_human": int(self.n_conserved_human),
             "n_rodent_specific": int(self.n_rodent_specific),
+            "n_conserved_inactive_in_human": int(self.n_conserved_inactive_in_human),
             "reasons": list(self.reasons),
         }
 
@@ -67,7 +80,11 @@ def human_relevance_transfer_index(
     Returns:
         An :class:`HRTIResult` with the score, contributing counts, and a
         per-key-event reason list. ``HRTIResult.score`` is ``nan`` when both
-        contributing counts are zero (insufficient evidence).
+        contributing counts are zero (insufficient evidence). Conserved key
+        events that are rodent-active but human-inactive are not part of the
+        canonical denominator, but are exposed as
+        ``n_conserved_inactive_in_human`` and penalize
+        ``coverage_adjusted_score``.
     """
     missing = _REQUIRED_COLUMNS - set(table.columns)
     if missing:
@@ -75,6 +92,7 @@ def human_relevance_transfer_index(
 
     conserved_human = 0
     rodent_specific = 0
+    conserved_inactive_in_human = 0
     reasons: list[str] = []
 
     for row in table.to_dict(orient="records"):
@@ -89,8 +107,14 @@ def human_relevance_transfer_index(
         elif conservation == "rodent_specific" and rodent_active:
             rodent_specific += 1
             reasons.append(f"{key}: rodent-specific KE active (+1 denominator only)")
+        elif conservation == "conserved" and rodent_active and not human_active:
+            conserved_inactive_in_human += 1
+            reasons.append(
+                f"{key}: conserved KE active in rodent but inactive in human "
+                "(coverage-adjusted denominator only)"
+            )
         elif conservation == "conserved" and not human_active:
-            reasons.append(f"{key}: conserved but inactive in human (ignored)")
+            reasons.append(f"{key}: conserved but inactive in both species (ignored)")
         elif conservation == "rodent_specific" and not rodent_active:
             reasons.append(f"{key}: rodent-specific but inactive (ignored)")
         else:
@@ -98,9 +122,17 @@ def human_relevance_transfer_index(
 
     denominator = conserved_human + rodent_specific
     score = float(conserved_human / denominator) if denominator else float("nan")
+    adjusted_denominator = denominator + conserved_inactive_in_human
+    coverage_adjusted_score = (
+        float(conserved_human / adjusted_denominator)
+        if adjusted_denominator
+        else float("nan")
+    )
     return HRTIResult(
         score=score,
         n_conserved_human=conserved_human,
         n_rodent_specific=rodent_specific,
+        n_conserved_inactive_in_human=conserved_inactive_in_human,
+        coverage_adjusted_score=coverage_adjusted_score,
         reasons=reasons,
     )

@@ -1,4 +1,4 @@
-"""Tests for the Milestone 8-9 coefficient registry."""
+"""Tests for the coefficient registry."""
 
 from __future__ import annotations
 
@@ -31,6 +31,14 @@ def test_registry_cards_include_prior_metadata() -> None:
     for card in r:
         assert card.prior_distribution in PRIOR_DISTRIBUTIONS
         assert isinstance(card.prior_params, dict)
+        assert card.effect_direction in (None, -1, 0, 1)
+
+
+def test_registry_exposes_load_bearing_effect_directions() -> None:
+    r = registry()
+    assert r.card("dynamics.latent_risk.dna_coupling").effect_direction == 1
+    assert r.card("dynamics.latent_risk.immune_coupling").effect_direction == -1
+    assert r.card("dynamics.mutation_rate.scale").effect_direction == 1
 
 
 def test_registry_returns_correct_types() -> None:
@@ -203,8 +211,8 @@ def test_no_inline_numeric_literals_in_covered_sites() -> None:
             )
 
 
-def test_registry_acceptance_check_for_milestone_8() -> None:
-    """The M8 audit signal: every card has a non-empty source field."""
+def test_registry_acceptance_check_sources_present() -> None:
+    """Audit signal: every card has a non-empty source field."""
     r = registry()
     unsourced = [c for c in r if not c.source.strip()]
     assert unsourced == [], (

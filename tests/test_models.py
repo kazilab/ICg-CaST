@@ -7,6 +7,7 @@ import pytest
 from icg_cast import SimConfig, simulate_cohort
 from icg_cast.models import (
     biological_coherence_summary,
+    calibration_metrics,
     evaluate_bundle,
     feature_sets,
     train_baselines,
@@ -34,6 +35,17 @@ def test_feature_sets_exclude_target_derived_columns(trained_outputs) -> None:
     for set_name, cols in feature_sets(cohort).items():
         assert forbidden.isdisjoint(cols), set_name
         validate_no_target_leakage(cols, feature_set=set_name)
+
+
+def test_feature_sets_report_split_and_combined_qaop_views(trained_outputs) -> None:
+    cohort = trained_outputs[0]
+    sets = feature_sets(cohort)
+
+    assert sets["qAOP_state_final"]
+    assert sets["qAOP_state_auc"]
+    assert set(sets["qAOP_state"]) == set(sets["qAOP_state_final"]).union(
+        sets["qAOP_state_auc"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -77,7 +89,24 @@ def test_train_baselines_output_schema(trained_outputs) -> None:
         "observed_direction",
         "failed_directionality_test",
         "mean_absolute_risk_change",
+        "intervention_severity_weight",
     }.issubset(counterfactual.columns)
+
+
+def test_train_baselines_handles_partial_observability_nans() -> None:
+    cohort, _ = simulate_cohort(SimConfig(n=80, months=36, seed=17))
+    omics_cols = [
+        c for c in cohort.columns if c.startswith(("tx_", "epi_"))
+    ]
+    cohort.loc[cohort.index[::3], omics_cols] = np.nan
+
+    metrics, importance, counterfactual, bundle = train_baselines(cohort, seed=17)
+
+    assert not metrics.empty
+    assert metrics[["roc_auc", "average_precision", "brier_score"]].apply(np.isfinite).all().all()
+    assert not importance.empty
+    assert not counterfactual.empty
+    assert bundle["feature_set"] == "multiomics_plus_qAOP"
 
 
 def test_evaluate_bundle_output_schema(trained_outputs) -> None:
@@ -105,11 +134,56 @@ def test_evaluate_bundle_output_schema(trained_outputs) -> None:
     )
     assert counterfactual["failed_directionality_test"].map(type).eq(bool).all()
 
-    assert {"tested_intervention_count", "correct_direction_count", "biological_coherence_score"}.issubset(
-        coherence.columns
-    )
+    assert {
+        "tested_intervention_count",
+        "correct_direction_count",
+        "biological_coherence_score",
+        "effect_weighted_coherence",
+        "severity_weighted_coherence",
+        "severity_effect_weighted_coherence",
+    }.issubset(coherence.columns)
     score = float(coherence["biological_coherence_score"].iloc[0])
     assert 0.0 <= score <= 1.0
+
+
+def test_calibration_metrics_keeps_empty_bin_skeleton() -> None:
+    y = np.array([0, 1, 1])
+    proba = np.array([0.05, 0.25, 0.95])
+
+    table = calibration_metrics(y, proba, n_bins=5)
+    bins = table[table["bin"] != "summary"]
+
+    assert len(bins) == 5
+    assert bins["n"].tolist() == [1, 1, 0, 0, 1]
+    assert bins.loc[bins["n"] == 0, "observed_event_rate"].isna().all()
+    assert bins.loc[bins["n"] == 0, "mean_predicted_risk"].isna().all()
+
+
+def test_calibration_metrics_uses_left_closed_bins() -> None:
+    y = np.array([0, 1, 1])
+    proba = np.array([0.0, 0.2, 1.0])
+
+    table = calibration_metrics(y, proba, n_bins=5)
+    bins = table[table["bin"] != "summary"]
+
+    assert bins["n"].tolist() == [1, 1, 0, 0, 1]
+    assert bins["mean_predicted_risk"].tolist()[:2] == [0.0, 0.2]
+    assert bins["mean_predicted_risk"].iloc[-1] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    "bad_proba",
+    [
+        np.array([-0.01, 0.5]),
+        np.array([0.5, 1.01]),
+        np.array([0.5, np.nan]),
+    ],
+)
+def test_calibration_metrics_rejects_invalid_probabilities(bad_proba: np.ndarray) -> None:
+    y = np.array([0, 1])
+
+    with pytest.raises(ValueError, match=r"proba must lie in \[0, 1\]"):
+        calibration_metrics(y, bad_proba, n_bins=5)
 
 
 def test_biological_coherence_summary_scores_directionality() -> None:

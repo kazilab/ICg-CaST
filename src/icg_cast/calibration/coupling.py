@@ -1,8 +1,8 @@
 """Calibration-driven coefficient updates.
 
-Milestone 10 turns the passive calibration bundle into an optional coefficient
-overlay. The default simulator remains synthetic and unchanged, but a caller
-can save a calibrated registry and run with it through ``ICG_CAST_COEFFICIENTS_PATH``
+Turns the passive calibration bundle into an optional coefficient overlay.
+The default simulator remains synthetic and unchanged, but a caller can save
+a calibrated registry and run with it through ``ICG_CAST_COEFFICIENTS_PATH``
 or an explicit ``use_registry(...)`` context.
 """
 
@@ -22,7 +22,43 @@ from icg_cast.constants import KCC_NAMES
 
 from .bundle import CalibrationBundle
 
+# ---------------------------------------------------------------------------
+# Policy constants for the calibration overlay. These are heuristics about how
+# strongly each evidence source should re-weight existing coefficient cards.
+# They live here (not in the coefficient registry) because they describe how
+# the overlay *maps* evidence -> registry edits, not how the qAOP dynamics
+# behave. Tune by editing the constants and updating the unit tests.
+# ---------------------------------------------------------------------------
+
+# String -> numeric confidence used by ``_confidence`` for evidence rows whose
+# weight field is a categorical label.
+_CONFIDENCE_FROM_LABEL: dict[str, float] = {
+    "high": 0.90, "strong": 0.90, "e1": 0.90, "e2": 0.90,
+    "moderate": 0.65, "medium": 0.65, "e3": 0.65,
+    "low": 0.35, "weak": 0.35, "e4": 0.35,
+}
+_DEFAULT_CONFIDENCE: float = 0.60
+
+# LINCS module-prior magnitude: a per-(perturbagen, module) score is softly
+# bounded and multiplied by this factor to produce a coefficient scaling.
+_LINCS_MODULE_SCALE_MAGNITUDE: float = 0.15
+
+# AOP-Wiki KER strength is converted to a coefficient scale via
+# ``intercept + slope * confidence``. With confidence in [0, 1] the resulting
+# scale ranges from 0.75 (no-confidence rescaling) to 1.25 (high-confidence).
+_AOPWIKI_SCALE_INTERCEPT: float = 0.75
+_AOPWIKI_SCALE_SLOPE: float = 0.50
+
+# ToxCast: per-KCC mean activation in [0, 1] is converted to a coefficient
+# scaling via ``1 + slope * activation``.
+_TOXCAST_KCC_SCALE_SLOPE: float = 0.25
+
 _KCC_RE = re.compile(r"\bkcc\s*([1-9]|10)\b", re.IGNORECASE)
+
+
+def _soft_bounded_lincs_score(score: float) -> float:
+    """Bound signed LINCS scores while preserving high-score separation."""
+    return score / (1.0 + abs(score))
 
 _KCC_COUPLING_CARDS: dict[int, tuple[str, ...]] = {
     1: (
@@ -184,13 +220,9 @@ def _confidence(row: dict[str, Any]) -> float:
             return float(np.clip(float(value), 0.0, 1.0))
         except (TypeError, ValueError):
             text = str(value).strip().lower()
-            if text in {"high", "strong", "e1", "e2"}:
-                return 0.90
-            if text in {"moderate", "medium", "e3"}:
-                return 0.65
-            if text in {"low", "weak", "e4"}:
-                return 0.35
-    return 0.60
+            if text in _CONFIDENCE_FROM_LABEL:
+                return _CONFIDENCE_FROM_LABEL[text]
+    return _DEFAULT_CONFIDENCE
 
 
 def _with_numeric_update(
@@ -264,7 +296,7 @@ def _apply_lincs_module_priors(
             CoefficientCard(
                 name=card_name,
                 default_value=mean_score,
-                units="LINCS module z-score",
+                units="LINCS module score",
                 evidence_level="E3",
                 source="LINCS L1000 local calibration",
                 notes=f"per-perturbagen module prior from {n_genes} mapped genes",
@@ -291,7 +323,7 @@ def _apply_lincs_module_priors(
         module_score = float(pd.to_numeric(sub["mean_score"], errors="coerce").mean())
         if not np.isfinite(module_score):
             continue
-        scale = 1.0 + 0.15 * math.tanh(module_score)
+        scale = 1.0 + _LINCS_MODULE_SCALE_MAGNITUDE * _soft_bounded_lincs_score(module_score)
         for name in _module_coefficients(registry, str(module)):
             registry, update = _with_numeric_update(
                 registry,
@@ -323,7 +355,7 @@ def _apply_aopwiki_ker_scaling(
         if kcc is None or state is None:
             continue
         strength = _confidence(row)
-        scale = 0.75 + 0.50 * strength
+        scale = _AOPWIKI_SCALE_INTERCEPT + _AOPWIKI_SCALE_SLOPE * strength
         for name in _AOP_STATE_COUPLINGS.get((kcc, state), ()):
             registry, update = _with_numeric_update(
                 registry,
@@ -399,7 +431,7 @@ def _apply_toxcast_calibration(
     for idx, activation in enumerate(mean_kcc, start=1):
         if activation <= 0.0:
             continue
-        scale = 1.0 + 0.25 * float(activation)
+        scale = 1.0 + _TOXCAST_KCC_SCALE_SLOPE * float(activation)
         for name in _KCC_COUPLING_CARDS.get(idx, ()):
             registry, update = _with_numeric_update(
                 registry,
@@ -454,4 +486,3 @@ def calibrated_registry_from_bundle(
         "evidence_upgrade_count": count_evidence_upgrade(base, registry),
         "updates": updates,
     }
-

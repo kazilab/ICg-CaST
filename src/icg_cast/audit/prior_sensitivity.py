@@ -83,10 +83,9 @@ def _refit_stage2_relaxed(
     mb: MechanismBottleneckClassifier,
     X_train: pd.DataFrame,
     y_train: np.ndarray | pd.Series,
-    S_train: pd.DataFrame,
     relaxed_signs: list[int],
 ) -> object:
-    """Refit stage 2 only (same stage-1 features / augmentation policy as ``mb``)."""
+    """Refit stage 2 only (same stage-1 prediction / augmentation policy as ``mb``)."""
     y_train = np.asarray(y_train, dtype=int).ravel()
     Xf = X_train[list(mb.feature_columns_)]
     S_hat = pd.DataFrame(
@@ -97,13 +96,17 @@ def _refit_stage2_relaxed(
     stage2 = _make_stage2_signs(mb, relaxed_signs)
 
     if mb.stage2_kind == "sign_constrained_augmented":
-        if mb.augment_interventions is None or mb.augment_latent_risk_fn is None:
+        if mb.augment_interventions is None or (
+            mb.augment_latent_risk_fn is None
+            and getattr(mb, "augment_cumulative_risk_fn", None) is None
+        ):
             raise ValueError("augmented MB-CNet missing augmentation config")
         rng = np.random.default_rng(mb.random_state)
         S_aug, y_aug, w_aug = augment_with_interventions(
-            S_train,
+            S_hat,
             interventions=mb.augment_interventions,
             latent_risk_fn=mb.augment_latent_risk_fn,
+            cumulative_risk_fn=getattr(mb, "augment_cumulative_risk_fn", None),
             hazard_scale=mb.augment_hazard_scale,
             months=mb.augment_months,
             rng=rng,
@@ -157,7 +160,6 @@ def prior_sensitivity(
             f"got {mb.stage2_kind!r}"
         )
 
-    S_tr = X_train[list(mb.bottleneck_units_)].copy()
     y_te = np.asarray(y_test, dtype=int).ravel()
 
     base_proxy = _MBStage2View(mb, mb.stage2_)
@@ -174,7 +176,7 @@ def prior_sensitivity(
     for j, unit in enumerate(mb.bottleneck_units_):
         relaxed = list(signs_full)
         relaxed[j] = 0
-        new_stage2 = _refit_stage2_relaxed(mb, X_train, y_train, S_tr, relaxed)
+        new_stage2 = _refit_stage2_relaxed(mb, X_train, y_train, relaxed)
         proxy = _MBStage2View(mb, new_stage2)
         r_resp = _responsive_conformity_mb(
             proxy, X_test, interventions, expected_directions_dgp,

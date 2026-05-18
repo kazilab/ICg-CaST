@@ -1,15 +1,12 @@
 """Coefficient registry: the single source of truth for numeric coefficients.
 
-PLAN.md reference: section 25 (Coefficient credibility roadmap),
-Milestones 8 and 9.
-
 Every numeric coefficient that drives the qAOP dynamics, the
 ``latent_risk`` equation, the chemical archetype tables, and the host
 susceptibility distributions is declared in
 ``materials/coefficient_cards.yaml`` and loaded through this module.
 
 The omics observation model (`omics.py`) and the toy mutational signature
-recipe (`signatures.py`) are also covered by the registry. Milestone 9 adds
+recipe (`signatures.py`) are also covered by the registry, which exposes
 seedable prior sampling for coefficient uncertainty.
 
 Public API::
@@ -42,8 +39,10 @@ from .registry import (
     PRIOR_DISTRIBUTIONS,
     CoefficientCard,
     CoefficientRegistry,
+    clear_registry_derived_caches,
     default_registry_path,
     load_registry,
+    register_registry_derived_cache,
     registry,
     save_registry,
     use_registry,
@@ -54,10 +53,12 @@ __all__ = [
     "PRIOR_DISTRIBUTIONS",
     "CoefficientCard",
     "CoefficientRegistry",
+    "clear_registry_derived_caches",
     "default_registry_path",
     "load_registry",
     "get_prior_params",
     "prior_sigma_for_evidence",
+    "register_registry_derived_cache",
     "registry",
     "sample_card_prior",
     "sample_coefficient",

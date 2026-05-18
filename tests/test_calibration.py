@@ -1,4 +1,4 @@
-"""Tests for the Milestone 7 public-data calibration prototype.
+"""Tests for the public-data calibration prototype.
 
 All tests use synthetic fixtures written into ``tmp_path``. No real COSMIC,
 LINCS, ToxCast, AOP-Wiki, or AOP-DB files are downloaded or committed.
@@ -257,6 +257,35 @@ def test_make_signature_profiles_preserves_toy_keys_when_partial_calibration(tmp
     # toy keys still present
     for key in ("aging", "SBS24_like", "SBS22_like", "oxidative_like"):
         assert key in profiles
+
+
+def test_make_signature_profiles_reorders_toy_profiles_for_calibrated_labels() -> None:
+    labels, base_profiles = make_signature_profiles()
+    reordered_labels = list(reversed(labels))
+    cal = CalibrationBundle(
+        signature_labels=reordered_labels,
+        signature_profiles={"SBS4_like": [1.0 / 96] * 96},
+    )
+
+    calibrated_labels, profiles = make_signature_profiles(calibration=cal)
+
+    assert calibrated_labels == reordered_labels
+    assert np.allclose(profiles["aging"], base_profiles["aging"][::-1])
+    assert np.allclose(profiles["SBS22_like"], base_profiles["SBS22_like"][::-1])
+    assert np.allclose(profiles["SBS4_like"], 1.0 / 96)
+
+
+def test_make_signature_profiles_rejects_incompatible_calibrated_labels() -> None:
+    labels = mutation_context_labels()
+    bad_labels = labels.copy()
+    bad_labels[0] = "not_a_valid_context"
+    cal = CalibrationBundle(
+        signature_labels=bad_labels,
+        signature_profiles={"SBS4_like": [1.0 / 96] * 96},
+    )
+
+    with pytest.raises(ValueError, match="must be a permutation"):
+        make_signature_profiles(calibration=cal)
 
 
 def test_default_simulate_unchanged_without_calibration() -> None:

@@ -17,8 +17,11 @@ from ..models import biological_coherence_summary
 
 __all__ = [
     "biological_coherence_score",
+    "effect_weighted_biological_coherence",
     "biological_coherence_summary",
     "pathway_attribution_consistency",
+    "severity_effect_weighted_biological_coherence",
+    "severity_weighted_biological_coherence",
 ]
 
 
@@ -28,6 +31,35 @@ def biological_coherence_score(counterfactual: pd.DataFrame) -> float:
     if summary.empty:
         return float("nan")
     return float(summary["biological_coherence_score"].iloc[0])
+
+def effect_weighted_biological_coherence(counterfactual: pd.DataFrame) -> float:
+    """Effect-size-weighted fraction of directional tests whose sign matched."""
+    summary = biological_coherence_summary(counterfactual)
+    if summary.empty:
+        return float("nan")
+    return float(summary["effect_weighted_coherence"].iloc[0])
+
+
+def severity_weighted_biological_coherence(
+    counterfactual: pd.DataFrame,
+    severity_column: str = "intervention_severity_weight",
+) -> float:
+    """Intervention-severity-weighted fraction of directional tests whose sign matched."""
+    summary = biological_coherence_summary(counterfactual, severity_column=severity_column)
+    if summary.empty:
+        return float("nan")
+    return float(summary["severity_weighted_coherence"].iloc[0])
+
+
+def severity_effect_weighted_biological_coherence(
+    counterfactual: pd.DataFrame,
+    severity_column: str = "intervention_severity_weight",
+) -> float:
+    """Severity- and effect-size-weighted fraction of directional sign matches."""
+    summary = biological_coherence_summary(counterfactual, severity_column=severity_column)
+    if summary.empty:
+        return float("nan")
+    return float(summary["severity_effect_weighted_coherence"].iloc[0])
 
 
 def pathway_attribution_consistency(
@@ -46,8 +78,9 @@ def pathway_attribution_consistency(
 
     Returns:
         DataFrame with one row per pathway, columns
-        ``[pathway, n_features, total_importance, share_of_total]``. The share
-        sums to 1.0 across rows when total importance is positive.
+        ``[pathway, n_features, total_importance, total_importance_clipped,
+        share_of_total]``. The share sums to 1.0 across rows when clipped
+        total importance is positive.
     """
     if feature_column not in importance.columns:
         raise KeyError(f"importance missing column {feature_column!r}")
@@ -60,9 +93,10 @@ def pathway_attribution_consistency(
         n_features=(feature_column, "nunique"),
         total_importance=(importance_column, "sum"),
     )
-    total = float(grouped["total_importance"].clip(lower=0).sum())
+    grouped["total_importance_clipped"] = grouped["total_importance"].clip(lower=0)
+    total = float(grouped["total_importance_clipped"].sum())
     if total > 0:
-        grouped["share_of_total"] = grouped["total_importance"].clip(lower=0) / total
+        grouped["share_of_total"] = grouped["total_importance_clipped"] / total
     else:
         grouped["share_of_total"] = np.nan
-    return grouped.sort_values("total_importance", ascending=False).reset_index(drop=True)
+    return grouped.sort_values("total_importance_clipped", ascending=False).reset_index(drop=True)

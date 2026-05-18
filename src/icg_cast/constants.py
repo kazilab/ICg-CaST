@@ -2,9 +2,9 @@
 
 Numeric coefficients (ARCHETYPE_KCC values, the archetype-sampling prior,
 and the per-archetype expected signatures) are read from the coefficient
-registry (PLAN.md §25, Milestones 8-9) and exposed here for backward
-compatibility. KCC / state / module *names* stay as ordered tuples in
-this module — they are vocabulary, not coefficients.
+registry and exposed here for backward compatibility. KCC / state / module
+*names* stay as ordered tuples in this module — they are vocabulary, not
+coefficients.
 """
 
 from __future__ import annotations

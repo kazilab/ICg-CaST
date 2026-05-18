@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
@@ -41,10 +42,26 @@ def validate_no_target_leakage(
 
 
 def feature_sets(df: pd.DataFrame, target: str = "future_cancer_transition_event") -> dict[str, list[str]]:
-    """Return deterministic feature groups used by baseline models."""
+    """Return deterministic feature groups used by baseline models.
+
+    ``qAOP_state`` intentionally preserves the historical combined final-state
+    plus AUC state view for continuity, even though those two summaries can be
+    strongly collinear. ``qAOP_state_final`` and ``qAOP_state_auc`` expose the
+    split views for reports that need to inspect that sensitivity directly.
+    """
     sets: dict[str, list[str]] = {}
     sets["chemical_KCC_host"] = [
         c for c in df.columns if c.startswith("kcc") or c.startswith("host_") or c == "dose"
+    ]
+    sets["qAOP_state_final"] = [
+        c
+        for c in df.columns
+        if c.startswith("state_final_") and "latent_risk" not in c
+    ]
+    sets["qAOP_state_auc"] = [
+        c
+        for c in df.columns
+        if c.startswith("state_auc_") and "latent_risk" not in c
     ]
     sets["qAOP_state"] = [
         c
@@ -69,23 +86,30 @@ def validate_binary_target(y: np.ndarray, context: str = "target") -> None:
 def _baseline_models(seed: int) -> dict[str, object]:
     return {
         "logistic_l2": make_pipeline(
+            SimpleImputer(strategy="mean", add_indicator=True),
             StandardScaler(with_mean=True),
             LogisticRegression(max_iter=1000, class_weight="balanced", solver="lbfgs"),
         ),
-        "random_forest": RandomForestClassifier(
-            n_estimators=180,
-            min_samples_leaf=3,
-            class_weight="balanced",
-            random_state=seed,
-            n_jobs=1,
+        "random_forest": make_pipeline(
+            SimpleImputer(strategy="mean", add_indicator=True),
+            RandomForestClassifier(
+                n_estimators=180,
+                min_samples_leaf=3,
+                class_weight="balanced",
+                random_state=seed,
+                n_jobs=1,
+            ),
         ),
-        "extra_trees": ExtraTreesClassifier(
-            n_estimators=180,
-            max_features="sqrt",
-            min_samples_leaf=3,
-            class_weight="balanced",
-            random_state=seed,
-            n_jobs=1,
+        "extra_trees": make_pipeline(
+            SimpleImputer(strategy="mean", add_indicator=True),
+            ExtraTreesClassifier(
+                n_estimators=180,
+                max_features="sqrt",
+                min_samples_leaf=3,
+                class_weight="balanced",
+                random_state=seed,
+                n_jobs=1,
+            ),
         ),
     }
 
@@ -125,7 +149,7 @@ def train_baselines(
             proba = model.predict_proba(x_test)[:, 1]
             auc = roc_auc_score(y_test, proba)
             ap = average_precision_score(y_test, proba)
-            brier = brier_score_loss(y_test, np.clip(proba, 1e-6, 1 - 1e-6))
+            brier = brier_score_loss(y_test, proba)
             metrics.append(
                 {
                     "feature_set": set_name,
@@ -188,7 +212,7 @@ def predictive_metrics(y: np.ndarray, proba: np.ndarray) -> dict[str, float]:
     return {
         "roc_auc": float(roc_auc_score(y, proba)),
         "average_precision": float(average_precision_score(y, proba)),
-        "brier_score": float(brier_score_loss(y, np.clip(proba, 1e-6, 1 - 1e-6))),
+        "brier_score": float(brier_score_loss(y, proba)),
         "event_rate": float(np.mean(y)),
         "mean_predicted_risk": float(np.mean(proba)),
         "n": float(len(y)),
@@ -196,27 +220,39 @@ def predictive_metrics(y: np.ndarray, proba: np.ndarray) -> dict[str, float]:
 
 
 def calibration_metrics(y: np.ndarray, proba: np.ndarray, n_bins: int = 10) -> pd.DataFrame:
-    """Return simple aggregate calibration diagnostics."""
+    """Return simple aggregate calibration diagnostics.
+
+    The table always contains ``n_bins`` bin rows plus one summary row. Empty
+    bins retain their skeleton with ``n=0`` and NaN rates, matching
+    ``validation.calibration.calibration_curve``. Bins use the conventional
+    left-closed, right-open intervals ``[low, high)``, except the final bin
+    includes ``proba == 1``.
+    """
     y = np.asarray(y, dtype=int)
     proba = np.asarray(proba, dtype=float)
+    if not np.isfinite(proba).all() or np.any((proba < 0.0) | (proba > 1.0)):
+        raise ValueError("proba must lie in [0, 1]")
     bins = np.linspace(0.0, 1.0, n_bins + 1)
-    bin_id = np.clip(np.digitize(proba, bins, right=True) - 1, 0, n_bins - 1)
+    bin_id = np.digitize(proba, bins[1:-1], right=False)
     ece = 0.0
     rows = []
     for i in range(n_bins):
         mask = bin_id == i
-        if not np.any(mask):
-            continue
-        observed = float(np.mean(y[mask]))
-        predicted = float(np.mean(proba[mask]))
-        weight = float(np.mean(mask))
-        ece += weight * abs(observed - predicted)
+        count = int(np.sum(mask))
+        if count:
+            observed = float(np.mean(y[mask]))
+            predicted = float(np.mean(proba[mask]))
+            weight = float(np.mean(mask))
+            ece += weight * abs(observed - predicted)
+        else:
+            observed = np.nan
+            predicted = np.nan
         rows.append(
             {
                 "bin": i,
                 "bin_low": float(bins[i]),
                 "bin_high": float(bins[i + 1]),
-                "n": int(np.sum(mask)),
+                "n": count,
                 "observed_event_rate": observed,
                 "mean_predicted_risk": predicted,
             }
@@ -233,16 +269,71 @@ def calibration_metrics(y: np.ndarray, proba: np.ndarray, n_bins: int = 10) -> p
     return pd.concat([pd.DataFrame(rows), pd.DataFrame([summary])], ignore_index=True)
 
 
-def biological_coherence_summary(counterfactual: pd.DataFrame) -> pd.DataFrame:
+def _weighted_directional_coherence(
+    correct: np.ndarray,
+    weights: np.ndarray,
+    *,
+    context: str,
+) -> float:
+    weights = np.asarray(weights, dtype=float)
+    if not np.isfinite(weights).all() or np.any(weights < 0.0):
+        raise ValueError(f"{context} weights must be finite and non-negative")
+    denom = float(weights.sum())
+    return float(weights[correct].sum() / denom) if denom > 0 else float("nan")
+
+
+def biological_coherence_summary(
+    counterfactual: pd.DataFrame,
+    severity_column: str = "intervention_severity_weight",
+) -> pd.DataFrame:
     """Summarize counterfactual directionality into one biological-coherence row."""
     scored = counterfactual[counterfactual["expected_direction"] != 0].copy()
+    if scored.empty:
+        return pd.DataFrame([{ "tested_intervention_count": 0,
+                               "correct_direction_count": 0,
+                               "biological_coherence_score": float("nan"),
+                               "effect_weighted_coherence": float("nan"),
+                               "severity_weighted_coherence": float("nan"),
+                               "severity_effect_weighted_coherence": float("nan") }])
     correct = scored["observed_direction"].to_numpy(dtype=int) == scored["expected_direction"].to_numpy(dtype=int)
+    deltas: np.ndarray | None = None
+    if "mean_absolute_risk_change" in scored.columns:
+        deltas = scored["mean_absolute_risk_change"].abs().to_numpy(dtype=float)
+        effect_weighted = _weighted_directional_coherence(
+            correct,
+            deltas,
+            context="mean_absolute_risk_change",
+        )
+    else:
+        effect_weighted = float("nan")
+    if severity_column in scored.columns:
+        severity_weights = scored[severity_column].to_numpy(dtype=float)
+        severity_weighted = _weighted_directional_coherence(
+            correct,
+            severity_weights,
+            context=severity_column,
+        )
+        severity_effect_weighted = (
+            _weighted_directional_coherence(
+                correct,
+                severity_weights * deltas,
+                context=f"{severity_column} * mean_absolute_risk_change",
+            )
+            if deltas is not None
+            else float("nan")
+        )
+    else:
+        severity_weighted = float("nan")
+        severity_effect_weighted = float("nan")
     return pd.DataFrame(
         [
             {
                 "tested_intervention_count": int(len(scored)),
                 "correct_direction_count": int(correct.sum()),
                 "biological_coherence_score": float(correct.mean()) if len(scored) else float("nan"),
+                "effect_weighted_coherence": effect_weighted,
+                "severity_weighted_coherence": severity_weighted,
+                "severity_effect_weighted_coherence": severity_effect_weighted,
             }
         ]
     )

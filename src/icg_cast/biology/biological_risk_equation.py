@@ -52,6 +52,10 @@ def biological_risk_equation(
         use_priors: Draw one seedable coefficient-prior realization before
             evaluating the equation.
         seed: Seed used when ``use_priors=True``.
+
+    Omitted state values are treated as zero at this biological boundary. The
+    ``clone_fraction`` term follows the frozen functional form and remains
+    linear because clone fraction is defined on ``[0, 1]``.
     """
     if use_priors:
         with use_registry(sampled_registry(seed=seed)):
@@ -59,14 +63,14 @@ def biological_risk_equation(
 
     n = _infer_n(states, kwargs)
     c = _coefficients()
-    dna = _column(states, kwargs, "dna_adducts", n)
-    ros = _column(states, kwargs, "ros", n)
-    inflammation = _column(states, kwargs, "inflammation", n)
-    epigenetic_age = _column(states, kwargs, "epigenetic_age", n)
-    proliferation = _column(states, kwargs, "proliferation", n)
-    drivers = _column(states, kwargs, "driver_count", n)
-    clone = _column(states, kwargs, "clone_fraction", n)
-    immune = _column(states, kwargs, "immune_clearance", n)
+    dna = _column(states, kwargs, "dna_adducts", n, strict=False)
+    ros = _column(states, kwargs, "ros", n, strict=False)
+    inflammation = _column(states, kwargs, "inflammation", n, strict=False)
+    epigenetic_age = _column(states, kwargs, "epigenetic_age", n, strict=False)
+    proliferation = _column(states, kwargs, "proliferation", n, strict=False)
+    drivers = _column(states, kwargs, "driver_count", n, strict=False)
+    clone = _column(states, kwargs, "clone_fraction", n, strict=False)
+    immune = _column(states, kwargs, "immune_clearance", n, strict=False)
 
     risk = expit(
         c["intercept"]
@@ -77,7 +81,7 @@ def biological_risk_equation(
         + c["epigenetic_age"] * np.log1p(epigenetic_age)
         + c["driver"] * np.log1p(drivers)
         + c["clone"] * clone
-        - c["immune"] * immune
+        + c["immune"] * immune
     )
     if risk.size == 1 and not isinstance(states, pd.DataFrame):
         return float(risk[0])
@@ -87,4 +91,3 @@ def biological_risk_equation(
 def get_biology_version() -> str:
     """Return the biological equation version."""
     return BIOLOGY_VERSION
-

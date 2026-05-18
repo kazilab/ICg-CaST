@@ -49,6 +49,8 @@ def test_simulate_and_graph_cli_write_outputs(tmp_path: Path) -> None:
             "prior_sample",
             "--coefficient-seed",
             "99",
+            "--simulator-backend",
+            "vectorized",
             "--outdir",
             str(outdir),
         ],
@@ -64,6 +66,7 @@ def test_simulate_and_graph_cli_write_outputs(tmp_path: Path) -> None:
     metadata = json.loads((outdir / "simulation_metadata.json").read_text(encoding="utf-8"))
     assert metadata["coefficient_mode"] == "prior_sample"
     assert metadata["coefficient_seed"] == 99
+    assert metadata["simulator_backend"] == "vectorized"
 
     graph = subprocess.run(
         [sys.executable, "-m", "icg_cast", "graph", "--outdir", str(outdir)],

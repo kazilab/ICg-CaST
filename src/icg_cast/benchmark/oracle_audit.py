@@ -1,8 +1,7 @@
-"""
-Oracle vs Biology Disagreement Audit (Milestone 11)
+"""Oracle vs biology disagreement audit.
 
-This module compares the frozen reference oracle against the biological
-risk equation and surfaces measurable disagreement.
+Compares the frozen reference oracle against the biological risk equation
+and surfaces measurable disagreement.
 """
 
 from __future__ import annotations

@@ -1,9 +1,8 @@
 """ICg-CaST public package interface.
 
-ICg-CaST (Integrated Carcinogenomics Causal State Theory) is the
-human-facing project name. The Python import is ``icg_cast`` and the
-console command is ``icg-cast``. All brand-level strings (display name,
-version, distribution name, default output filenames) live in
+ICg-CaST: Integrated Carcinogenomics Causal State Theory. 
+The Python import is ``icg_cast`` and the console command is ``icg-cast``. 
+All brand-level strings (display name, version, distribution name, default output filenames) live in
 ``icg_cast._branding`` so this package has a single source of truth.
 """
 

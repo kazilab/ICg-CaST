@@ -8,11 +8,9 @@ more axes of difficulty:
 - host heterogeneity: low vs. high variance in susceptibility
 - observability: full multi-omics vs. randomly masked modalities
 
-The actual simulator hook is left as `None` here and is wired by the migration
-agent during Milestone 5.5 once `simulator.py` exists at the planned path.
-This module currently exposes only the schema and the variant registry so
-that downstream tests, scoring code, and the leaderboard schema can be
-written and exercised against fixtures.
+This module exposes the schema and the variant registry so that downstream
+tests, scoring code, and the leaderboard schema can be written and exercised
+against fixtures.
 """
 
 from __future__ import annotations

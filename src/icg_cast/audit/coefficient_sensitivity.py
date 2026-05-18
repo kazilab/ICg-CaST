@@ -1,4 +1,4 @@
-"""Per-coefficient sensitivity audit for Milestone 12."""
+"""Per-coefficient sensitivity audit."""
 
 from __future__ import annotations
 

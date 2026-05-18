@@ -16,13 +16,15 @@ pairs.
 from __future__ import annotations
 
 import functools
-import math
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+from scipy.special import expit
 
+from .coefficients import register_registry_derived_cache
 from .coefficients import registry as _registry
 from .constants import ARCHETYPE_SIGNATURE, EPI_MODULES, TRANSCRIPT_MODULES
 
@@ -83,6 +85,8 @@ class _OmicsCoefficients:
     primary_weight_kcc2: float
     primary_weight_dna: float
     primary_weight_ros: float
+    primary_weight_center: float
+    primary_weight_scale: float
     primary_weight_min: float
     primary_weight_max: float
     oxidative_kcc5_threshold: float
@@ -111,6 +115,7 @@ def _build_recipe(prefix: str, modules: dict[str, list[str]]) -> dict[str, list[
 
 @functools.cache
 def _omics_coefficients() -> _OmicsCoefficients:
+    """Materialise the omics-block coefficient bundle from the active registry."""
     r = _registry()
     g = r.get
     return _OmicsCoefficients(
@@ -123,6 +128,8 @@ def _omics_coefficients() -> _OmicsCoefficients:
         primary_weight_kcc2=g("omics.signature_mix.primary_weight_kcc2_coeff"),
         primary_weight_dna=g("omics.signature_mix.primary_weight_dna_coeff"),
         primary_weight_ros=g("omics.signature_mix.primary_weight_ros_coeff"),
+        primary_weight_center=g("omics.signature_mix.primary_weight_center"),
+        primary_weight_scale=g("omics.signature_mix.primary_weight_scale"),
         primary_weight_min=g("omics.signature_mix.primary_weight_min"),
         primary_weight_max=g("omics.signature_mix.primary_weight_max"),
         oxidative_kcc5_threshold=g("omics.signature_mix.oxidative_kcc5_threshold"),
@@ -135,6 +142,37 @@ def _omics_coefficients() -> _OmicsCoefficients:
         mut_total_ros=g("omics.mut_total.ros_coeff"),
         mut_total_min=int(g("omics.mut_total.min_count")),
     )
+
+
+register_registry_derived_cache(_omics_coefficients.cache_clear)
+
+
+def _cosine_similarity(first: np.ndarray, second: np.ndarray) -> float:
+    numerator = float(np.dot(first, second))
+    denominator = float(np.linalg.norm(first) * np.linalg.norm(second))
+    if not np.isfinite(denominator) or denominator <= 0.0:
+        return 0.0
+    return float(np.clip(numerator / denominator, 0.0, 1.0))
+
+
+def _bounded_primary_weight(
+    score: float,
+    *,
+    lower: float,
+    upper: float,
+    center: float,
+    scale: float,
+) -> float:
+    if upper <= lower:
+        raise ValueError("primary signature weight max must exceed min")
+    if scale <= 0.0:
+        raise ValueError("primary signature weight scale must be positive")
+    return float(lower + (upper - lower) * expit((score - center) / scale))
+
+
+def _soft_bounded_score(score: float) -> float:
+    """Bound signed external scores without tanh's early high-score collapse."""
+    return score / (1.0 + abs(score))
 
 
 def generate_omics(
@@ -192,19 +230,30 @@ def generate_omics(
 
     primary_sig = _active_archetype_signature(archetype)
     if primary_sig not in signature_profiles:
-        primary_sig = next(iter(signature_profiles))
+        fallback = next(iter(signature_profiles))
+        warnings.warn(
+            f"archetype {archetype!r} expects signature {primary_sig!r} but it is "
+            f"absent from the supplied profiles; falling back to {fallback!r}. "
+            "Check that the calibration bundle covers every active archetype.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        primary_sig = fallback
     sig_mix = C.aging_base_weight * signature_profiles.get(
         "aging", signature_profiles[primary_sig]
     ).copy()
-    primary_weight = float(
-        np.clip(
-            C.primary_weight_intercept
-            + C.primary_weight_kcc2 * k2
-            + C.primary_weight_dna * dna
-            + C.primary_weight_ros * ros,
-            C.primary_weight_min,
-            C.primary_weight_max,
-        )
+    primary_score = float(
+        C.primary_weight_intercept
+        + C.primary_weight_kcc2 * k2
+        + C.primary_weight_dna * dna
+        + C.primary_weight_ros * ros
+    )
+    primary_weight = _bounded_primary_weight(
+        primary_score,
+        lower=C.primary_weight_min,
+        upper=C.primary_weight_max,
+        center=C.primary_weight_center,
+        scale=C.primary_weight_scale,
     )
     sig_mix = (1.0 - primary_weight) * sig_mix + primary_weight * signature_profiles[primary_sig]
     if k5 > C.oxidative_kcc5_threshold and "oxidative_like" in signature_profiles:
@@ -228,10 +277,9 @@ def generate_omics(
     for label, count in zip(signature_labels, counts, strict=True):
         safe = label.replace(">", "to").replace("[", "_").replace("]", "_")
         out[f"sig96_{safe}"] = int(count)
+    empirical = counts / max(1, counts.sum())
     for sig_name, profile in signature_profiles.items():
-        out[f"sig_activity_{sig_name}"] = float(
-            np.dot(counts / max(1, counts.sum()), profile) / np.dot(profile, profile)
-        )
+        out[f"sig_activity_{sig_name}"] = _cosine_similarity(empirical, profile)
     out["mut_total_count"] = int(total_mutations)
     return out
 
@@ -243,6 +291,12 @@ def _active_archetype_signature(archetype: str) -> str:
     if card_name in r:
         return r.get_str(card_name)
     return ARCHETYPE_SIGNATURE.get(archetype, "aging")
+
+
+# Magnitude of the simulator-time LINCS module-score multiplier; mirrors the
+# corresponding policy in ``calibration.coupling`` so registry overlays and
+# simulator-time calibration agree by construction.
+_LINCS_MULTIPLIER_MAGNITUDE: float = 0.15
 
 
 def _lincs_module_multipliers(
@@ -265,5 +319,7 @@ def _lincs_module_multipliers(
     for module, sub in exact.groupby("module"):
         score = float(pd.to_numeric(sub["mean_score"], errors="coerce").mean())
         if np.isfinite(score):
-            multipliers[str(module)] = 1.0 + 0.15 * math.tanh(score)
+            multipliers[str(module)] = (
+                1.0 + _LINCS_MULTIPLIER_MAGNITUDE * _soft_bounded_score(score)
+            )
     return multipliers

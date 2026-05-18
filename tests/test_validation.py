@@ -1,4 +1,4 @@
-"""Tests for the Milestone 6 validation subpackage."""
+"""Tests for the validation subpackage."""
 
 from __future__ import annotations
 
@@ -10,9 +10,12 @@ from icg_cast.validation import (
     biological_coherence_score,
     biological_coherence_summary,
     calibration_curve,
+    effect_weighted_biological_coherence,
     expected_calibration_error,
     human_relevance_transfer_index,
     pathway_attribution_consistency,
+    severity_effect_weighted_biological_coherence,
+    severity_weighted_biological_coherence,
 )
 
 
@@ -34,6 +37,54 @@ def test_biological_coherence_score_matches_expected_directions() -> None:
     assert score == pytest.approx(2 / 3)
 
 
+def test_effect_weighted_biological_coherence_uses_risk_change_magnitude() -> None:
+    counterfactual = pd.DataFrame(
+        [
+            {"expected_direction": -1, "observed_direction": -1, "mean_absolute_risk_change": -0.20},
+            {"expected_direction": -1, "observed_direction": +1, "mean_absolute_risk_change": 0.05},
+            {"expected_direction": +1, "observed_direction": +1, "mean_absolute_risk_change": 0.15},
+        ]
+    )
+
+    score = effect_weighted_biological_coherence(counterfactual)
+
+    assert score == pytest.approx((0.20 + 0.15) / (0.20 + 0.05 + 0.15))
+
+
+def test_severity_weighted_biological_coherence_uses_intervention_weight() -> None:
+    counterfactual = pd.DataFrame(
+        [
+            {
+                "expected_direction": -1,
+                "observed_direction": -1,
+                "mean_absolute_risk_change": -0.20,
+                "intervention_severity_weight": 1.0,
+            },
+            {
+                "expected_direction": -1,
+                "observed_direction": +1,
+                "mean_absolute_risk_change": 0.05,
+                "intervention_severity_weight": 6.0,
+            },
+            {
+                "expected_direction": +1,
+                "observed_direction": +1,
+                "mean_absolute_risk_change": 0.15,
+                "intervention_severity_weight": 3.0,
+            },
+        ]
+    )
+
+    severity_score = severity_weighted_biological_coherence(counterfactual)
+    severity_effect_score = severity_effect_weighted_biological_coherence(counterfactual)
+
+    assert severity_score == pytest.approx((1.0 + 3.0) / (1.0 + 6.0 + 3.0))
+    assert severity_effect_score == pytest.approx(
+        (1.0 * 0.20 + 3.0 * 0.15)
+        / (1.0 * 0.20 + 6.0 * 0.05 + 3.0 * 0.15)
+    )
+
+
 def test_pathway_attribution_consistency_groups_by_pathway() -> None:
     importance = pd.DataFrame(
         [
@@ -41,6 +92,7 @@ def test_pathway_attribution_consistency_groups_by_pathway() -> None:
             {"feature": "tx_MDM2", "permutation_importance_mean_auc_drop": 0.06},
             {"feature": "epi_PRC2", "permutation_importance_mean_auc_drop": 0.04},
             {"feature": "sig_activity_SBS4_like", "permutation_importance_mean_auc_drop": 0.02},
+            {"feature": "tx_OFFTARGET", "permutation_importance_mean_auc_drop": -0.03},
         ]
     )
     pathway_map = {
@@ -54,6 +106,7 @@ def test_pathway_attribution_consistency_groups_by_pathway() -> None:
     by_pathway = table.set_index("pathway")
     assert by_pathway.loc["p53_checkpoint", "n_features"] == 2
     assert by_pathway.loc["p53_checkpoint", "total_importance"] == pytest.approx(0.16)
+    assert by_pathway.loc["unmapped", "total_importance_clipped"] == pytest.approx(0.0)
     # unmapped feature is preserved as its own pathway
     assert "unmapped" in by_pathway.index
     # shares sum to ~1
@@ -88,6 +141,8 @@ def test_human_relevance_transfer_index_with_mixed_conservation() -> None:
              "human_activation": 0.1, "rodent_activation": 0.8},
             {"key_event": "off_target_low_signal", "conservation": "conserved",
              "human_activation": 0.1, "rodent_activation": 0.1},
+            {"key_event": "rodent_only_conserved_signal", "conservation": "conserved",
+             "human_activation": 0.1, "rodent_activation": 0.9},
         ]
     )
 
@@ -95,7 +150,9 @@ def test_human_relevance_transfer_index_with_mixed_conservation() -> None:
 
     assert result.n_conserved_human == 2
     assert result.n_rodent_specific == 2
+    assert result.n_conserved_inactive_in_human == 1
     assert result.score == pytest.approx(0.5)
+    assert result.coverage_adjusted_score == pytest.approx(2 / 5)
     assert len(result.reasons) == len(table)
 
 
@@ -110,3 +167,5 @@ def test_human_relevance_transfer_index_is_nan_without_evidence() -> None:
     assert np.isnan(result.score)
     assert result.n_conserved_human == 0
     assert result.n_rodent_specific == 0
+    assert result.n_conserved_inactive_in_human == 1
+    assert result.coverage_adjusted_score == pytest.approx(0.0)

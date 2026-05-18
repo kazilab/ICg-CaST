@@ -30,19 +30,31 @@ from icg_cast._branding import (
 )
 from icg_cast.benchmark import dgp as _dgp
 from icg_cast.benchmark import generate
+from icg_cast.benchmark.conformity_bootstrap import (
+    responsive_conformity_from_table,
+    responsive_passes_from_table,
+)
 from icg_cast.biology.biological_risk_equation import biological_risk_equation
 from icg_cast.bottleneck import DEFAULT_BOTTLENECK_UNITS
 from icg_cast.cli import (
-    _EXPECTED_DIRECTIONS_PRIOR,
-    _INTERVENTIONS,
-    _dgp_directions,
     _make_variant,
     _omics_feature_columns,
-    _risk_function_directions,
     _write_model_card,
 )
 from icg_cast.config import SimConfig
 from icg_cast.graph import write_theory_graph
+from icg_cast.interventions import (
+    EXPECTED_DIRECTIONS_PRIOR as _EXPECTED_DIRECTIONS_PRIOR,
+)
+from icg_cast.interventions import (
+    INTERVENTIONS as _INTERVENTIONS,
+)
+from icg_cast.interventions import (
+    dgp_directions as _dgp_directions,
+)
+from icg_cast.interventions import (
+    risk_function_directions as _risk_function_directions,
+)
 from icg_cast.io import ensure_dir, write_cohort, write_simulation_metadata
 from icg_cast.models import biological_coherence_summary, evaluate_bundle, train_baselines
 from icg_cast.oracle.reference_risk_oracle import reference_risk_oracle
@@ -341,29 +353,37 @@ def _benchmark(
         x.iloc[test_idx],
         interventions=_INTERVENTIONS,
         expected_directions=_EXPECTED_DIRECTIONS_PRIOR,
+        responsive_threshold=responsive_threshold,
     )
     dgp_dirs = _dgp_directions(cohort_name)
     dgp_conformity, dgp_table = mb.score_intervention_conformity(
         x.iloc[test_idx],
         interventions=_INTERVENTIONS,
         expected_directions=dgp_dirs,
+        responsive_threshold=responsive_threshold,
     )
     oracle_dirs = _risk_function_directions(states.iloc[test_idx], _INTERVENTIONS, reference_risk_oracle)
     oracle_conformity, oracle_table = mb.score_intervention_conformity(
         x.iloc[test_idx],
         interventions=_INTERVENTIONS,
         expected_directions=oracle_dirs,
+        responsive_threshold=responsive_threshold,
     )
     biology_dirs = _risk_function_directions(states.iloc[test_idx], _INTERVENTIONS, biological_risk_equation)
     biology_conformity, biology_table = mb.score_intervention_conformity(
         x.iloc[test_idx],
         interventions=_INTERVENTIONS,
         expected_directions=biology_dirs,
+        responsive_threshold=responsive_threshold,
     )
 
     deltas = prior_table["mean_risk_change"].to_numpy(dtype=float)
     expected_dgp = np.array([dgp_dirs[i] for i in prior_table["intervention"]], dtype=int)
-    responsive = (np.sign(deltas) == np.sign(expected_dgp)) & (np.abs(deltas) >= responsive_threshold)
+    responsive = responsive_conformity_from_table(
+        deltas,
+        expected_dgp,
+        threshold=responsive_threshold,
+    )
     summary = {
         "cohort": cohort_name,
         "variant": variant_name,
@@ -372,13 +392,13 @@ def _benchmark(
         "n_test": int(len(test_idx)),
         "auroc": float(roc_auc_score(y[test_idx], proba)),
         "auprc": float(average_precision_score(y[test_idx], proba)),
-        "brier": float(brier_score_loss(y[test_idx], np.clip(proba, 1e-6, 1 - 1e-6))),
+        "brier": float(brier_score_loss(y[test_idx], proba)),
         "recovery_r2_mean": float(recovery["recovery_r2"].mean()),
         "prior_conformity": float(prior_conformity),
         "dgp_conformity": float(dgp_conformity),
         "oracle_conformity": float(oracle_conformity),
         "biology_conformity": float(biology_conformity),
-        "responsive_dgp_conformity": float(responsive.mean()),
+        "responsive_dgp_conformity": float(responsive),
     }
 
     intervention = prior_table.rename(
@@ -393,7 +413,11 @@ def _benchmark(
     intervention["expected_direction_oracle"] = [oracle_dirs[i] for i in intervention["intervention"]]
     intervention["passes_biology"] = biology_table["passed_directionality"].to_numpy()
     intervention["expected_direction_biology"] = [biology_dirs[i] for i in intervention["intervention"]]
-    intervention["responsive_dgp"] = responsive
+    intervention["responsive_dgp"] = responsive_passes_from_table(
+        deltas,
+        expected_dgp,
+        threshold=responsive_threshold,
+    )
 
     cohort_path = outdir / f"{cohort_name}_{variant_name}_cohort.csv"
     summary_path = _write_json(outdir / "benchmark_summary.json", summary)

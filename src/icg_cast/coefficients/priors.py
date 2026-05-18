@@ -101,6 +101,17 @@ def _lognormal_sample(
     sigma: float,
     params: dict[str, Any],
 ) -> np.ndarray:
+    """Multiplicative lognormal perturbation: ``values * exp(N(0, sigma))``.
+
+    ``params["sigma"]`` overrides the evidence-level spread on the *log* scale.
+    ``params["sd"]``, if supplied, is interpreted as an absolute standard
+    deviation on the *original* scale and the draw is routed to
+    :func:`_normal_sample` instead (the two parameterisations are unit-
+    incompatible — additive normal on the original scale vs. multiplicative
+    lognormal — and were previously silently mixed).
+    """
+    if "sd" in params:
+        return _normal_sample(values, rng, sigma=sigma, params=params)
     sigma = _params_float(params, "sigma", sigma)
     sampled = values * np.exp(rng.normal(0.0, sigma, size=values.shape))
     low = params.get("low")
@@ -168,6 +179,10 @@ def _dirichlet_sample(
         "concentration",
         _concentration_for_evidence(evidence_level),
     )
+    # Regularisation floor: ``rng.dirichlet`` requires strictly positive
+    # alpha, so components with ``probs[i] ≈ 0`` would otherwise raise. The
+    # floor at 1e-3 keeps the sampler well-defined for peaked priors at the
+    # cost of injecting a small amount of mass into nominally-zero components.
     alpha = np.maximum(probs * concentration, 1e-3)
     return rng.dirichlet(alpha)
 

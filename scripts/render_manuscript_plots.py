@@ -15,7 +15,9 @@ of each cohort × seed in turn (≈ 60 seconds for the full v0.4 sweep).
 
 from __future__ import annotations
 
+import argparse
 import sys
+import warnings
 from pathlib import Path
 
 import matplotlib
@@ -26,9 +28,12 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-V0_DIR = REPO_ROOT / "outputs" / "bottleneck_v0_5"
-FIGDIR = REPO_ROOT / "outputs" / "figures"
-FIGDIR.mkdir(parents=True, exist_ok=True)
+from icg_cast.io import ensure_dir  # noqa: E402
+
+DEFAULT_V0_DIR = REPO_ROOT / "outputs" / "bottleneck_v0_5"
+DEFAULT_FIGDIR = REPO_ROOT / "outputs" / "figures"
+V0_DIR = DEFAULT_V0_DIR
+FIGDIR = DEFAULT_FIGDIR
 
 matplotlib.use("Agg")
 plt.rcParams.update({
@@ -104,7 +109,14 @@ def _ensure_per_state_r2() -> pd.DataFrame:
                              "bottleneck_unit": unit, "recovery_r2": float(r2)})
             print(f"  refit recovery R^2 for {cohort} seed={seed}: mean R^2 = {rec['recovery_r2'].mean():.3f}")
     out = pd.DataFrame(rows)
-    out.to_csv(csv, index=False)
+    try:
+        out.to_csv(csv, index=False)
+    except OSError as exc:
+        warnings.warn(
+            f"could not cache regenerated per-state R2 table at {csv}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return out
 
 
@@ -258,8 +270,28 @@ def fig_intervention_deltas() -> None:
     plt.close(fig)
 
 
-def main() -> None:
-    summary = pd.read_csv(V0_DIR / "summary.csv")
+def _display_path(path: Path) -> Path:
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path
+
+
+def main(argv: list[str] | None = None) -> None:
+    global FIGDIR, V0_DIR
+
+    parser = argparse.ArgumentParser(description="Render manuscript figures from ICg-Bench artifacts")
+    parser.add_argument("--inputdir", type=Path, default=DEFAULT_V0_DIR)
+    parser.add_argument("--outdir", type=Path, default=DEFAULT_FIGDIR)
+    args = parser.parse_args(argv)
+
+    V0_DIR = args.inputdir
+    FIGDIR = ensure_dir(args.outdir, fallback_prefix="icg-cast-figures-")
+    summary_path = V0_DIR / "summary.csv"
+    if not summary_path.exists():
+        raise SystemExit(f"summary artifact not found: {summary_path}")
+
+    summary = pd.read_csv(summary_path)
     per_state = _ensure_per_state_r2()
 
     fig_responsive_conformity(summary)
@@ -268,7 +300,7 @@ def main() -> None:
     fig_intervention_deltas()
 
     pngs = sorted(p.name for p in FIGDIR.glob("fig_*.png"))
-    print(f"wrote {len(pngs)} figures under {FIGDIR.relative_to(REPO_ROOT)}/:")
+    print(f"wrote {len(pngs)} figures under {_display_path(FIGDIR)}/:")
     for p in pngs:
         print(f"  - {p}")
 
